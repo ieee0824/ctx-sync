@@ -122,13 +122,3 @@ fn commit_works_without_git_identity() {
     let author = git(store.repo_dir(), &env, &["log", "-1", "--format=%an <%ae>"]);
     assert_eq!(author.trim(), "ctx-sync <ctx-sync@localhost>");
 }
-
-#[test]
-fn stubbed_sync_state_reports_not_implemented() {
-    let remote = TestRemote::new();
-    let home = tempfile::tempdir().unwrap();
-    let store = store(&remote, home.path());
-    store.ensure().unwrap();
-
-    assert!(store.sync_state().is_err());
-}
