@@ -1,7 +1,21 @@
-use super::not_implemented;
-use crate::cli::ContextArgs;
-use ctx_sync_core::Result;
+use ctx_sync_core::ops::{Runtime, Workspace};
+use ctx_sync_core::store::ContextStore;
+use ctx_sync_core::view::{build_context_view, render_context_markdown};
+use ctx_sync_core::{Error, Result};
 
-pub fn run(_args: &ContextArgs) -> Result<()> {
-    Err(not_implemented("context"))
+use crate::cli::ContextArgs;
+
+/// Prints the local snapshot; run `ctx-sync pull` first for the latest one.
+pub fn run(args: &ContextArgs) -> Result<()> {
+    let rt = Runtime::from_env()?;
+    let ws = Workspace::open(&rt, &std::env::current_dir()?)?;
+    let view = build_context_view(&ws.store.snapshot()?);
+    if args.json {
+        let json = serde_json::to_string_pretty(&view)
+            .map_err(|e| Error::General(format!("cannot serialize context: {e}")))?;
+        println!("{json}");
+    } else {
+        print!("{}", render_context_markdown(&view));
+    }
+    Ok(())
 }
