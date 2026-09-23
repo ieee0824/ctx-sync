@@ -1,0 +1,21 @@
+[package]
+name = "ctx-sync-cli"
+description = "Sync shared project context between AI coding agents"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "ctx-sync"
+path = "src/main.rs"
+
+[dependencies]
+ctx-sync-core = { path = "../ctx-sync-core" }
+clap.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
+tempfile.workspace = true
