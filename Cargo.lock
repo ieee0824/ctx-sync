@@ -233,6 +233,7 @@ dependencies = [
  "ctx-sync-core",
  "ctx-sync-testutil",
  "predicates",
+ "serde_json",
  "tempfile",
  "uuid",
 ]
