@@ -7,6 +7,7 @@ mod cli;
 mod commands;
 mod convert;
 mod project_root;
+mod prompt;
 
 use cli::Cli;
 
