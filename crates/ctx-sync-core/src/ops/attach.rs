@@ -2,7 +2,7 @@
 //!
 //! Works without `gh`: only `git` is used.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use chrono::{DateTime, FixedOffset};
 use serde::Serialize;
@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use super::Runtime;
 use crate::config::{CONFIG_FILE, ProjectConfig};
+use crate::fs_util::TempDirGuard;
 use crate::gist_id::parse_gist_id;
 use crate::model::{META_FILE, Meta};
 use crate::state::{Index, LocalProject, Protocol, StateRoot};
@@ -50,7 +51,7 @@ pub fn attach(rt: &Runtime, opts: AttachOptions) -> Result<AttachOutcome> {
 
     // The project id is only known after reading 00-meta.json, so clone
     // into a temporary location first.
-    let tmp = TempDir::new(rt.state_root.tmp_dir().join(Uuid::new_v4().to_string()));
+    let tmp = TempDirGuard::new(rt.state_root.tmp_dir().join(Uuid::new_v4().to_string()));
     let tmp_state = StateRoot::new(tmp.path()).project(&Uuid::nil());
     let tmp_store = rt.gist_store(&tmp_state, &gist_id, opts.protocol);
     tmp_store.ensure()?;
@@ -100,27 +101,10 @@ pub fn attach(rt: &Runtime, opts: AttachOptions) -> Result<AttachOutcome> {
     })
 }
 
-/// Directory removed when dropped, on success and on every error path.
-struct TempDir(PathBuf);
-
-impl TempDir {
-    fn new(path: PathBuf) -> Self {
-        Self(path)
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use ctx_sync_testutil::{FIXED_NOW, SEED_PROJECT_ID, TestRemote};
 
     use super::*;

@@ -1,7 +1,7 @@
 //! Small file system helpers for local state files.
 
 use std::io::ErrorKind;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -50,6 +50,26 @@ pub fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
         .map_err(|e| Error::General(format!("cannot serialize {}: {e}", path.display())))?;
     text.push('\n');
     write_atomic(path, text.as_bytes())
+}
+
+/// Directory that is removed when dropped, on success and on every error
+/// path. Used for temporary clones and files under the state root.
+pub(crate) struct TempDirGuard(PathBuf);
+
+impl TempDirGuard {
+    pub(crate) fn new(path: PathBuf) -> Self {
+        Self(path)
+    }
+
+    pub(crate) fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDirGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 #[cfg(test)]
