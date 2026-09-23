@@ -92,11 +92,95 @@ impl Git {
 }
 
 fn error_from_output(args: &[&str], out: &GitOutput) -> Error {
-    Error::General(format!(
-        "git {} failed: {}",
-        args.join(" "),
-        out.stderr.trim()
-    ))
+    failure_to_error(
+        classify(&out.stderr),
+        format!("git {} failed: {}", args.join(" "), out.stderr.trim()),
+    )
+}
+
+/// Kind of a `git` failure, judged from its stderr.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GitFailure {
+    Auth,
+    NonFastForward,
+    Conflict,
+    NotFound,
+    Network,
+    Other,
+}
+
+/// Patterns in lowercase, evaluated from top to bottom.
+const PATTERNS: &[(GitFailure, &[&str])] = &[
+    (
+        GitFailure::Auth,
+        &[
+            "authentication failed",
+            "permission denied (publickey)",
+            "could not read username",
+            "could not read password",
+            "terminal prompts disabled",
+            "invalid username or password",
+            "returned error: 403",
+        ],
+    ),
+    (
+        GitFailure::NonFastForward,
+        &[
+            "non-fast-forward",
+            "(fetch first)",
+            "updates were rejected because",
+        ],
+    ),
+    (
+        GitFailure::Conflict,
+        &[
+            "conflict (",
+            "could not apply",
+            "merge conflict",
+            "resolve all conflicts",
+        ],
+    ),
+    (
+        GitFailure::NotFound,
+        &[
+            "repository not found",
+            "does not appear to be a git repository",
+            "returned error: 404",
+        ],
+    ),
+    (
+        GitFailure::Network,
+        &[
+            "could not resolve host",
+            "connection timed out",
+            "failed to connect",
+            "connection refused",
+            "network is unreachable",
+        ],
+    ),
+];
+
+/// Classifies a git failure from its stderr (case-insensitive).
+///
+/// Requires the English messages produced under `LC_ALL=C`.
+pub fn classify(stderr: &str) -> GitFailure {
+    let stderr = stderr.to_lowercase();
+    PATTERNS
+        .iter()
+        .find(|(_, patterns)| patterns.iter().any(|p| stderr.contains(p)))
+        .map_or(GitFailure::Other, |(kind, _)| *kind)
+}
+
+/// Converts a classified failure into the error that carries its exit code.
+pub fn failure_to_error(kind: GitFailure, message: String) -> Error {
+    match kind {
+        GitFailure::Auth => Error::Auth(message),
+        GitFailure::NonFastForward | GitFailure::NotFound | GitFailure::Network => {
+            Error::Remote(message)
+        }
+        GitFailure::Conflict => Error::ContextConflict { files: vec![] },
+        GitFailure::Other => Error::General(message),
+    }
 }
 
 #[cfg(test)]
@@ -154,6 +238,75 @@ mod tests {
             "{}",
             out.stderr
         );
+    }
+
+    #[test]
+    fn classifies_stderr() {
+        let cases = [
+            (
+                "remote: Invalid username or password.\nfatal: Authentication failed for 'https://gist.github.com/abc.git/'",
+                GitFailure::Auth,
+            ),
+            (
+                "git@gist.github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.",
+                GitFailure::Auth,
+            ),
+            (
+                "fatal: could not read Username for 'https://gist.github.com': terminal prompts disabled",
+                GitFailure::Auth,
+            ),
+            (
+                " ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs to 'x'\nhint: Updates were rejected because the remote contains work that you do not have locally.",
+                GitFailure::NonFastForward,
+            ),
+            (
+                " ! [rejected]        main -> main (non-fast-forward)",
+                GitFailure::NonFastForward,
+            ),
+            (
+                "CONFLICT (content): Merge conflict in 20-architecture.md\nerror: could not apply 1234567... edit",
+                GitFailure::Conflict,
+            ),
+            (
+                "remote: Repository not found.\nfatal: repository 'https://gist.github.com/x.git/' not found",
+                GitFailure::NotFound,
+            ),
+            (
+                "fatal: '/tmp/nope' does not appear to be a git repository",
+                GitFailure::NotFound,
+            ),
+            (
+                "fatal: unable to access 'https://gist.github.com/x.git/': Could not resolve host: gist.github.com",
+                GitFailure::Network,
+            ),
+            ("fatal: something else", GitFailure::Other),
+        ];
+        for (stderr, expected) in cases {
+            assert_eq!(classify(stderr), expected, "{stderr}");
+        }
+    }
+
+    #[test]
+    fn failure_to_error_maps_exit_codes() {
+        let msg = || "m".to_string();
+        assert_eq!(failure_to_error(GitFailure::Auth, msg()).exit_code(), 3);
+        assert_eq!(
+            failure_to_error(GitFailure::NonFastForward, msg()).exit_code(),
+            5
+        );
+        assert_eq!(failure_to_error(GitFailure::NotFound, msg()).exit_code(), 5);
+        assert_eq!(failure_to_error(GitFailure::Network, msg()).exit_code(), 5);
+        assert_eq!(failure_to_error(GitFailure::Conflict, msg()).exit_code(), 2);
+        assert_eq!(failure_to_error(GitFailure::Other, msg()).exit_code(), 1);
+    }
+
+    #[test]
+    fn run_checked_classifies_missing_remote() {
+        let (_dir, git) = init_repo();
+        let err = git
+            .run_checked(&["ls-remote", "/nonexistent/ctx-sync-remote"])
+            .unwrap_err();
+        assert_eq!(err.exit_code(), 5, "{err}");
     }
 
     #[test]
