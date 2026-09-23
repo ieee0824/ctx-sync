@@ -14,6 +14,7 @@ pub mod git;
 pub mod ids;
 pub mod model;
 pub mod state;
+pub mod store;
 
 pub use error::{Error, Result};
 
