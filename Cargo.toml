@@ -1,7 +1,24 @@
-[package]
-name = "ctx-sync"
+[workspace]
+resolver = "3"
+members = ["crates/ctx-sync-core", "crates/ctx-sync-cli"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+rust-version = "1.89"
+repository = "https://github.com/ieee0824/ctx-sync"
 
-[dependencies]
+[workspace.dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+directories = "6"
+sha2 = "0.10"
+tempfile = "3"
+assert_cmd = "2"
+predicates = "3"
