@@ -85,6 +85,8 @@ Local state, including the Gist clone and worker identity, lives outside the pro
 
 The [Codex skill](.codex/skills/ctx-sync/SKILL.md) gives agents the operating rules for starting, recording decisions, handing off work, and finishing. It uses the CLI to do the work; it does not implement synchronization itself.
 
+Run `ctx-sync install-agent-instructions` to add a Shared Context section to the project's `AGENTS.md`. It preserves existing instructions, and you can review the file before committing it.
+
 ## Security warning
 
 A secret Gist is readable by anyone with its URL. Do not treat it as a secret store. Never write credentials, tokens, API keys, environment secrets, or private keys into shared context.
@@ -109,7 +111,7 @@ A secret Gist is readable by anyone with its URL. Do not treat it as a secret st
 | `ctx-sync done` | Mark this worker done and sync; accepts `--summary`. |
 | `ctx-sync agent start` | Pull and print onboarding context; use `--name` to register or `--resume` to continue a completed worker. |
 | `ctx-sync agent finish` | Record a handoff and sync; accepts the `handoff` fields. |
-| `ctx-sync install-agent-instructions` | Reserved for a future release; currently returns an error. |
+| `ctx-sync install-agent-instructions` | Add Shared Context guidance to the project's `AGENTS.md` without changing existing instructions. |
 
 `handoff` and `decision add` commit locally by default; pass `--sync` to publish immediately. `done` and `agent finish` always sync.
 

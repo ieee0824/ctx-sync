@@ -1,6 +1,7 @@
 //! Use cases behind the CLI commands.
 
 mod agent;
+mod agent_instructions;
 mod attach;
 mod bootstrap;
 mod decision;
@@ -11,6 +12,10 @@ mod runtime;
 mod workspace;
 
 pub use agent::{AgentStartOptions, AgentStartOutcome, agent_finish, agent_start};
+pub use agent_instructions::{
+    AGENT_INSTRUCTIONS_HEADING, InstallOutcome, agent_instructions_section,
+    install_agent_instructions, merge_agent_instructions,
+};
 pub use attach::{AttachOptions, AttachOutcome, attach};
 pub use bootstrap::{BootstrapApplyOutcome, apply_bootstrap};
 pub use decision::{DecisionAddOutcome, NewDecision, add_decision};
