@@ -14,6 +14,7 @@ pub mod git;
 pub mod ids;
 pub mod model;
 pub mod ops;
+pub mod repo_info;
 pub mod state;
 pub mod store;
 
