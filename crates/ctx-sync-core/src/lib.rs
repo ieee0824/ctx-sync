@@ -12,6 +12,7 @@ pub mod gh;
 pub mod gist_id;
 pub mod git;
 pub mod ids;
+pub mod model;
 pub mod state;
 
 pub use error::{Error, Result};
