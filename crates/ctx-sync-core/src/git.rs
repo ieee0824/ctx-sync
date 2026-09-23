@@ -167,7 +167,13 @@ pub fn classify(stderr: &str) -> GitFailure {
     let stderr = stderr.to_lowercase();
     PATTERNS
         .iter()
-        .find(|(_, patterns)| patterns.iter().any(|p| stderr.contains(p)))
+        .find(|(kind, patterns)| {
+            patterns.iter().any(|p| stderr.contains(p))
+                // `git clone <missing local path>`: "fatal: repository '<path>' does not exist"
+                || (*kind == GitFailure::NotFound
+                    && stderr.contains("repository '")
+                    && stderr.contains("' does not exist"))
+        })
         .map_or(GitFailure::Other, |(kind, _)| *kind)
 }
 
@@ -278,6 +284,14 @@ mod tests {
             (
                 "fatal: unable to access 'https://gist.github.com/x.git/': Could not resolve host: gist.github.com",
                 GitFailure::Network,
+            ),
+            (
+                "fatal: repository '/nonexistent/ctx-sync-remote' does not exist",
+                GitFailure::NotFound,
+            ),
+            (
+                "fatal: path 'x' does not exist in 'main'",
+                GitFailure::Other,
             ),
             ("fatal: something else", GitFailure::Other),
         ];
