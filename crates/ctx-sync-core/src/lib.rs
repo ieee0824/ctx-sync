@@ -6,6 +6,8 @@
 
 pub mod clock;
 pub mod error;
+pub mod gh;
+pub mod gist_id;
 pub mod git;
 pub mod ids;
 
