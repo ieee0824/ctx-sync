@@ -1,15 +1,40 @@
-use ctx_sync_core::ops::{self, AgentStartOptions, Runtime};
+use ctx_sync_core::ops::{self, AgentStartOptions, Runtime, Workspace};
 use ctx_sync_core::view::render_onboard_markdown;
 use ctx_sync_core::{Result, clock};
 
-use super::not_implemented;
-use crate::cli::{AgentCommand, AgentStartArgs};
+use crate::cli::{AgentCommand, AgentFinishArgs, AgentStartArgs};
+use crate::convert::handoff_input;
 
 pub fn run(command: &AgentCommand) -> Result<()> {
     match command {
         AgentCommand::Start(args) => start(args),
-        AgentCommand::Finish(_args) => Err(not_implemented("agent finish")),
+        AgentCommand::Finish(args) => finish(args),
     }
+}
+
+fn finish(args: &AgentFinishArgs) -> Result<()> {
+    let rt = Runtime::from_env()?;
+    let ws = Workspace::open(&rt, &std::env::current_dir()?)?;
+    let outcome = ops::agent_finish(&ws, handoff_input(&args.fields), clock::now()?)?;
+    for warning in outcome
+        .warnings
+        .iter()
+        .chain(outcome.sync.iter().flat_map(|sync| &sync.warnings))
+    {
+        eprintln!("warning: {warning}");
+    }
+    let revision = outcome
+        .sync
+        .as_ref()
+        .expect("agent_finish always synchronizes")
+        .revision
+        .as_str();
+    println!("# Handoff Complete\n");
+    println!("worker: {} ({})", outcome.worker_name, outcome.short_id);
+    println!("status: {}", outcome.status);
+    println!("file: {}", outcome.file_name);
+    println!("revision: {revision}");
+    Ok(())
 }
 
 fn start(args: &AgentStartArgs) -> Result<()> {
