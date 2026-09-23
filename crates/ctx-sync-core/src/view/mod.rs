@@ -10,9 +10,14 @@ use crate::ids::short_id;
 use crate::model::{MdDoc, Worker, WorkerStatus};
 
 pub mod context;
+pub mod onboard;
 pub mod status;
 
 pub use context::{ContextView, DecisionSummary, build_context_view, render_context_markdown};
+pub use onboard::{
+    DecisionBrief, OnboardView, RecentChange, WorkerBrief, build_onboard_view,
+    render_onboard_markdown,
+};
 pub use status::{StatusView, build_status_view, render_status_text};
 
 #[derive(Debug, Clone, Serialize)]

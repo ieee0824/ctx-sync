@@ -47,10 +47,10 @@ fn nested_help_succeeds() {
 #[test]
 fn unimplemented_command_exits_1() {
     ctx_sync()
-        .arg("onboard")
+        .arg("install-agent-instructions")
         .assert()
         .code(1)
-        .stderr(contains("not implemented: onboard"));
+        .stderr(contains("not implemented: install-agent-instructions"));
 }
 
 #[test]
