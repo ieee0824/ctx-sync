@@ -1,9 +1,9 @@
 //! Conversion of CLI arguments into core types.
 
-use ctx_sync_core::model::WorkerStatus;
+use ctx_sync_core::model::{DecisionStatus, WorkerStatus};
 use ctx_sync_core::ops::HandoffInput;
 
-use crate::cli::{HandoffFields, WorkerStatusArg};
+use crate::cli::{DecisionStatusArg, HandoffFields, WorkerStatusArg};
 
 pub fn worker_status(arg: WorkerStatusArg) -> WorkerStatus {
     match arg {
@@ -11,6 +11,14 @@ pub fn worker_status(arg: WorkerStatusArg) -> WorkerStatus {
         WorkerStatusArg::Blocked => WorkerStatus::Blocked,
         WorkerStatusArg::Done => WorkerStatus::Done,
         WorkerStatusArg::Abandoned => WorkerStatus::Abandoned,
+    }
+}
+
+pub fn decision_status(arg: DecisionStatusArg) -> DecisionStatus {
+    match arg {
+        DecisionStatusArg::Proposed => DecisionStatus::Proposed,
+        DecisionStatusArg::Accepted => DecisionStatus::Accepted,
+        DecisionStatusArg::Rejected => DecisionStatus::Rejected,
     }
 }
 
