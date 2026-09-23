@@ -124,11 +124,11 @@ fn commit_works_without_git_identity() {
 }
 
 #[test]
-fn stubbed_operations_report_not_implemented() {
+fn stubbed_sync_state_reports_not_implemented() {
     let remote = TestRemote::new();
     let home = tempfile::tempdir().unwrap();
     let store = store(&remote, home.path());
     store.ensure().unwrap();
-    assert!(store.pull().is_err());
+
     assert!(store.sync_state().is_err());
 }

@@ -112,6 +112,27 @@ impl GistStore {
         git.run_line(&["rev-parse", "--short", "HEAD"]).map(Some)
     }
 
+    /// Commits HEAD has that `origin/<branch>` lacks, and the reverse, as of
+    /// the last fetch.
+    pub(crate) fn ahead_behind(&self, branch: &str) -> Result<(u32, u32)> {
+        let range = format!("HEAD...origin/{branch}");
+        let out = self
+            .git()
+            .run_line(&["rev-list", "--left-right", "--count", &range])?;
+        let mut counts = out.split_whitespace().map(str::parse::<u32>);
+        match (counts.next(), counts.next()) {
+            (Some(Ok(ahead)), Some(Ok(behind))) => Ok((ahead, behind)),
+            _ => Err(Error::General(format!(
+                "unexpected output of git rev-list: {out:?}"
+            ))),
+        }
+    }
+
+    /// Short hash of HEAD.
+    pub(crate) fn short_head(&self) -> Result<String> {
+        self.git().run_line(&["rev-parse", "--short", "HEAD"])
+    }
+
     /// `-c user.name=... -c user.email=...` for the parts git has no value for.
     pub(crate) fn identity_args(&self) -> Result<Vec<&'static str>> {
         let git = self.git();
