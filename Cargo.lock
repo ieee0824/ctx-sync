@@ -231,6 +231,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "ctx-sync-core",
+ "ctx-sync-testutil",
  "predicates",
  "tempfile",
 ]
@@ -240,6 +241,7 @@ name = "ctx-sync-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "ctx-sync-testutil",
  "directories",
  "serde",
  "serde_json",
@@ -248,6 +250,13 @@ dependencies = [
  "thiserror",
  "toml",
  "uuid",
+]
+
+[[package]]
+name = "ctx-sync-testutil"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
 ]
 
 [[package]]

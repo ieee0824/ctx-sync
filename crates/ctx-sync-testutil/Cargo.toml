@@ -1,0 +1,12 @@
+[package]
+name = "ctx-sync-testutil"
+description = "Test helpers for ctx-sync: a local bare repository standing in for a Gist"
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+tempfile.workspace = true
