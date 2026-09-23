@@ -6,8 +6,6 @@ use ctx_sync_core::git::Git;
 
 /// The top level of the git worktree containing `cwd`, or `cwd` itself when
 /// it is not inside a git repository.
-// Used by init / attach / bootstrap (#43, #44, #58); remove this allow then.
-#[allow(dead_code)]
 pub fn detect_project_root(cwd: &Path) -> PathBuf {
     match Git::new(cwd).run_line(&["rev-parse", "--show-toplevel"]) {
         Ok(top) if !top.is_empty() => PathBuf::from(top),
