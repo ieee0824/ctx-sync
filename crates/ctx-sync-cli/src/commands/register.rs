@@ -1,7 +1,22 @@
-use super::not_implemented;
-use crate::cli::RegisterArgs;
-use ctx_sync_core::Result;
+use ctx_sync_core::ops::{self, Runtime, Workspace};
+use ctx_sync_core::{Result, clock};
 
-pub fn run(_args: &RegisterArgs) -> Result<()> {
-    Err(not_implemented("register"))
+use crate::cli::RegisterArgs;
+
+pub fn run(args: &RegisterArgs) -> Result<()> {
+    let rt = Runtime::from_env()?;
+    let ws = Workspace::open(&rt, &std::env::current_dir()?)?;
+    let outcome = ops::register(&ws, &args.name, args.force, clock::now()?)?;
+    println!(
+        "{}",
+        if outcome.created {
+            "Registered worker"
+        } else {
+            "Already registered"
+        }
+    );
+    println!();
+    println!("id: {}", outcome.identity.short_id());
+    println!("name: {}", outcome.identity.name);
+    Ok(())
 }
