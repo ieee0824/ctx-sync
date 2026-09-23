@@ -18,4 +18,5 @@ directories.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+ctx-sync-testutil = { path = "../ctx-sync-testutil" }
 tempfile.workspace = true

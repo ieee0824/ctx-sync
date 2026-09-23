@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/ctx-sync-core", "crates/ctx-sync-cli"]
+members = ["crates/ctx-sync-core", "crates/ctx-sync-cli", "crates/ctx-sync-testutil"]
 
 [workspace.package]
 version = "0.1.0"

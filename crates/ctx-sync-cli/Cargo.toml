@@ -16,6 +16,7 @@ ctx-sync-core = { path = "../ctx-sync-core" }
 clap.workspace = true
 
 [dev-dependencies]
+ctx-sync-testutil = { path = "../ctx-sync-testutil" }
 assert_cmd.workspace = true
 predicates.workspace = true
 tempfile.workspace = true
