@@ -20,3 +20,4 @@ ctx-sync-testutil = { path = "../ctx-sync-testutil" }
 assert_cmd.workspace = true
 predicates.workspace = true
 tempfile.workspace = true
+uuid.workspace = true

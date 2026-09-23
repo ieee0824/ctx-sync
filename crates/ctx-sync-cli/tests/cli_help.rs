@@ -47,10 +47,10 @@ fn nested_help_succeeds() {
 #[test]
 fn unimplemented_command_exits_1() {
     ctx_sync()
-        .arg("sync")
+        .arg("onboard")
         .assert()
         .code(1)
-        .stderr(contains("not implemented: sync"));
+        .stderr(contains("not implemented: onboard"));
 }
 
 #[test]

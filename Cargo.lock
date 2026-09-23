@@ -234,6 +234,7 @@ dependencies = [
  "ctx-sync-testutil",
  "predicates",
  "tempfile",
+ "uuid",
 ]
 
 [[package]]
