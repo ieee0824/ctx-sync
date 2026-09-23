@@ -5,6 +5,7 @@ use clap::error::ErrorKind;
 
 mod cli;
 mod commands;
+mod convert;
 mod project_root;
 
 use cli::Cli;
