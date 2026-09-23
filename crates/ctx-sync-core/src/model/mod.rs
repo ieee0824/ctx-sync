@@ -1,6 +1,7 @@
 //! Files stored in the context Gist.
 
 pub mod decision;
+pub mod decisions;
 pub mod docs;
 pub mod md;
 pub mod meta;
@@ -8,6 +9,9 @@ pub mod snapshot;
 pub mod worker;
 
 pub use decision::{DECISION_PREFIX, Decision, DecisionId, DecisionStatus, slugify};
+pub use decisions::{
+    DuplicateSeq, duplicate_decision_seqs, effective_decisions, next_decision_seq,
+};
 pub use docs::{ARCHITECTURE_FILE, PROJECT_FILE};
 pub use md::{MdDoc, MdSection};
 pub use meta::{META_FILE, Meta, SCHEMA_VERSION};
