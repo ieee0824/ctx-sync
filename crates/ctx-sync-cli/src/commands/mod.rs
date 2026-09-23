@@ -41,3 +41,12 @@ pub fn dispatch(command: Command) -> Result<()> {
 fn not_implemented(command: &str) -> Error {
     Error::General(format!("not implemented: {command}"))
 }
+
+/// Points at `ctx-sync status` when a command stops on a context conflict.
+/// The error itself is returned unchanged (exit code 2).
+fn hint_on_conflict<T>(result: Result<T>) -> Result<T> {
+    if let Err(Error::ContextConflict { .. }) = &result {
+        eprintln!("hint: run `ctx-sync status` for details");
+    }
+    result
+}
