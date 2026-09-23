@@ -11,6 +11,7 @@ use crate::Result;
 use crate::ids::short_id;
 use crate::model::{Worker, WorkerStatus};
 use crate::repo_info::{self, RepoInfo};
+use crate::secrets;
 use crate::store::{ContextStore, SyncOutcome};
 
 /// Files taken from git are capped so that worker files stay small.
@@ -114,6 +115,7 @@ pub fn handoff(
     now: DateTime<FixedOffset>,
 ) -> Result<HandoffOutcome> {
     let identity = ws.require_identity()?;
+    let warnings = secret_warnings(&input);
     ws.store.ensure()?;
     let file_name = Worker::file_name_for(&identity.id);
     let current = match ws.store.read_file(&file_name)? {
@@ -139,8 +141,36 @@ pub fn handoff(
         file_name,
         committed,
         sync,
-        warnings: Vec::new(),
+        warnings,
     })
+}
+
+/// Warnings for obvious credentials in the values given to this handoff.
+/// Field names follow the CLI options (`attention[0]`, ...).
+fn secret_warnings(input: &HandoffInput) -> Vec<String> {
+    let mut fields: Vec<(String, &str)> = Vec::new();
+    for (name, value) in [("task", &input.task), ("summary", &input.summary)] {
+        if let Some(value) = value {
+            fields.push((name.to_string(), value));
+        }
+    }
+    let lists = [
+        ("working-on", &input.working_on),
+        ("changed", &input.changed),
+        ("interface-change", &input.interface_changes),
+        ("attention", &input.attention),
+        ("blocked-by", &input.blocked_by),
+    ];
+    for (name, items) in lists {
+        for (i, item) in items.iter().flatten().enumerate() {
+            fields.push((format!("{name}[{i}]"), item));
+        }
+    }
+    fields
+        .iter()
+        .flat_map(|(field, text)| secrets::scan(field, text))
+        .map(|finding| secrets::warning_message(&finding))
+        .collect()
 }
 
 #[cfg(test)]

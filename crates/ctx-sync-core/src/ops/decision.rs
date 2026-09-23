@@ -9,6 +9,7 @@ use serde::Serialize;
 use super::Workspace;
 use crate::ids::short_id;
 use crate::model::{Decision, DecisionId, DecisionStatus, next_decision_seq, slugify};
+use crate::secrets;
 use crate::store::{ContextStore, PullOutcome, SyncOutcome};
 use crate::{Error, Result};
 
@@ -44,8 +45,20 @@ pub fn add_decision(
         return Err(Error::InvalidConfig("decision title is empty".into()));
     }
 
+    let mut warnings: Vec<String> = [
+        ("title", Some(&title)),
+        ("context", input.context.as_ref()),
+        ("decision", input.decision.as_ref()),
+        ("reason", input.reason.as_ref()),
+        ("consequences", input.consequences.as_ref()),
+    ]
+    .into_iter()
+    .filter_map(|(field, text)| text.map(|t| secrets::scan(field, t)))
+    .flatten()
+    .map(|finding| secrets::warning_message(&finding))
+    .collect();
+
     // Number the decision from the latest known state to avoid collisions.
-    let mut warnings = Vec::new();
     if let PullOutcome::Diverged { .. } = ws.store.pull()? {
         warnings.push(
             "local context has unpushed commits; the decision number is based on the local copy \
