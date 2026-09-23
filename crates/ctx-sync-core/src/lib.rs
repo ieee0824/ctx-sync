@@ -5,6 +5,7 @@
 //! agents through a GitHub Gist used as a Git repository.
 
 pub mod clock;
+pub mod config;
 pub mod error;
 pub mod gh;
 pub mod gist_id;
