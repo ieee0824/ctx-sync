@@ -27,6 +27,21 @@ fn worker_file(worker: &TestWorker) -> std::path::PathBuf {
         .expect("worker file")
 }
 
+fn worker_file_named(worker: &TestWorker, name: &str) -> std::path::PathBuf {
+    std::fs::read_dir(context_repo(worker))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("40-worker-")
+                && Worker::parse(&std::fs::read_to_string(path).unwrap())
+                    .is_ok_and(|worker| worker.name == name)
+        })
+        .expect("named worker file")
+}
+
 #[test]
 fn auto_attaches_and_registers_from_existing_config() {
     let remote = seeded_remote();
@@ -187,4 +202,218 @@ fn recorded_conflict_warns_on_stderr() {
         .stderr(contains(
             "warning: unresolved context conflict: 20-architecture.md; run `ctx-sync status`",
         ));
+}
+
+#[test]
+fn finish_publishes_a_handoff_for_another_agent() {
+    let remote = seeded_remote();
+    let a = TestWorker::new(&remote);
+    let b = TestWorker::new(&remote);
+    common::attach(&a);
+    ctx_sync(&a)
+        .args(["agent", "start", "--name", "a"])
+        .assert()
+        .success();
+    common::attach(&b);
+    ctx_sync(&b)
+        .args(["agent", "start", "--name", "b"])
+        .assert()
+        .success();
+
+    let output = ctx_sync(&a)
+        .args([
+            "agent",
+            "finish",
+            "--summary",
+            "Implemented parser",
+            "--attention",
+            "Parser API changed",
+            "--interface-change",
+            "ParserResult gained warnings",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let text = stdout(&output);
+    assert!(
+        text.starts_with("# Handoff Complete\n\nworker: a ("),
+        "{text}"
+    );
+    assert!(text.contains("status: working\n"), "{text}");
+    assert!(text.contains("file: 40-worker-"), "{text}");
+    assert!(text.contains("revision: "), "{text}");
+
+    ctx_sync(&b)
+        .args(["agent", "start"])
+        .assert()
+        .success()
+        .stdout(contains("## You\n\nb ("))
+        .stdout(contains("[a] Parser API changed"))
+        .stdout(contains("a: Implemented parser"));
+    ctx_sync(&b)
+        .args(["agent", "finish", "--summary", "Gist backend"])
+        .assert()
+        .success()
+        .stdout(contains("# Handoff Complete"));
+
+    assert!(
+        remote
+            .read_file(
+                worker_file_named(&a, "a")
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+            )
+            .unwrap()
+            .contains("Parser API changed")
+    );
+    assert!(
+        remote
+            .read_file(
+                worker_file_named(&b, "b")
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+            )
+            .unwrap()
+            .contains("Gist backend")
+    );
+}
+
+#[test]
+fn finish_passes_through_handoff_fields_and_keeps_the_requested_status() {
+    let remote = seeded_remote();
+    let worker = TestWorker::new(&remote);
+    common::attach(&worker);
+    ctx_sync(&worker)
+        .args(["agent", "start", "--name", "parser"])
+        .assert()
+        .success();
+    ctx_sync(&worker)
+        .args([
+            "agent",
+            "finish",
+            "--task",
+            "Parser",
+            "--summary",
+            "Waiting on API",
+            "--status",
+            "blocked",
+            "--working-on",
+            "Parsing errors",
+            "--changed",
+            "src/parser.rs",
+            "--interface-change",
+            "ParserResult gained warnings",
+            "--attention",
+            "Review the API",
+            "--blocked-by",
+            "Schema decision",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("status: blocked"));
+
+    let file = worker_file_named(&worker, "parser");
+    let published = Worker::parse(
+        &remote
+            .read_file(file.file_name().unwrap().to_str().unwrap())
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(published.status, WorkerStatus::Blocked);
+    assert_eq!(published.task, "Parser");
+    assert_eq!(published.summary, "Waiting on API");
+    assert_eq!(published.working_on, ["Parsing errors"]);
+    assert_eq!(published.changed, ["src/parser.rs"]);
+    assert_eq!(
+        published.interface_changes,
+        ["ParserResult gained warnings"]
+    );
+    assert_eq!(published.attention, ["Review the API"]);
+    assert_eq!(published.blocked_by, ["Schema decision"]);
+    assert_eq!(published.branch.as_deref(), Some("main"));
+    assert!(published.commit.is_some());
+
+    ctx_sync(&worker)
+        .args(["agent", "finish", "--summary", "Still waiting"])
+        .assert()
+        .success()
+        .stdout(contains("status: blocked"));
+    let published = Worker::parse(
+        &remote
+            .read_file(file.file_name().unwrap().to_str().unwrap())
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(published.status, WorkerStatus::Blocked);
+}
+
+#[test]
+fn finish_reports_credential_warnings_on_stderr() {
+    let remote = seeded_remote();
+    let worker = TestWorker::new(&remote);
+    common::attach(&worker);
+    ctx_sync(&worker)
+        .args(["agent", "start", "--name", "parser"])
+        .assert()
+        .success();
+    let example = ["ghp_", "0123456789abcdefghij0123"].concat();
+    let output = ctx_sync(&worker)
+        .args(["agent", "finish", "--attention", &example])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("warning: possible credential (github-token) in attention[0]"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains(&example));
+}
+
+#[test]
+fn finish_exits_with_2_on_a_context_conflict() {
+    let remote = seeded_remote();
+    let a = TestWorker::new(&remote);
+    let b = TestWorker::new(&remote);
+    for (worker, name) in [(&a, "a"), (&b, "b")] {
+        common::attach(worker);
+        ctx_sync(worker)
+            .args(["agent", "start", "--name", name])
+            .assert()
+            .success();
+    }
+    for (worker, replacement) in [(&a, "core-a"), (&b, "core-b")] {
+        let path = context_repo(worker).join("20-architecture.md");
+        let original = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(
+            path,
+            original.replace("- core\n", &format!("- {replacement}\n")),
+        )
+        .unwrap();
+    }
+    ctx_sync(&a)
+        .args(["agent", "finish", "--summary", "Architecture A"])
+        .assert()
+        .success();
+    let output = ctx_sync(&b)
+        .args(["agent", "finish", "--summary", "Architecture B"])
+        .assert()
+        .code(2)
+        .stderr(contains("Context conflict detected:"))
+        .stderr(contains("20-architecture.md"))
+        .get_output()
+        .clone();
+    assert!(output.stdout.is_empty());
+    assert!(
+        remote
+            .read_file("20-architecture.md")
+            .unwrap()
+            .contains("- core-a\n")
+    );
 }

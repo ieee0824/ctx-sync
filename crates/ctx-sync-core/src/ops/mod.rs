@@ -10,7 +10,7 @@ mod register;
 mod runtime;
 mod workspace;
 
-pub use agent::{AgentStartOptions, AgentStartOutcome, agent_start};
+pub use agent::{AgentStartOptions, AgentStartOutcome, agent_finish, agent_start};
 pub use attach::{AttachOptions, AttachOutcome, attach};
 pub use bootstrap::{BootstrapApplyOutcome, apply_bootstrap};
 pub use decision::{DecisionAddOutcome, NewDecision, add_decision};

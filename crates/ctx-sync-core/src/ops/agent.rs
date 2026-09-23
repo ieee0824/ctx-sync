@@ -1,14 +1,18 @@
-//! `agent start`: prepare a worktree and return its onboarding context.
+//! High-level commands for an agent's work session.
 
 use std::path::PathBuf;
 
 use chrono::{DateTime, FixedOffset};
 use serde::Serialize;
+use uuid::Uuid;
 
-use super::{AttachOptions, HandoffInput, Runtime, Workspace, attach, handoff, register};
+use super::{
+    AttachOptions, HandoffInput, HandoffOutcome, Runtime, Workspace, attach, handoff, register,
+};
 use crate::config::{CONFIG_FILE, ProjectConfig, find_project_root};
-use crate::model::WorkerStatus;
-use crate::state::Protocol;
+use crate::fs_util::TempDirGuard;
+use crate::model::{ContextSnapshot, WorkerStatus};
+use crate::state::{Protocol, StateRoot};
 use crate::store::{ContextStore, PullOutcome};
 use crate::view::{OnboardView, build_onboard_view};
 use crate::{Error, Result};
@@ -76,7 +80,8 @@ pub fn agent_start(rt: &Runtime, opts: AgentStartOptions) -> Result<AgentStartOu
     };
 
     let mut warnings = Vec::new();
-    if matches!(ws.store.pull()?, PullOutcome::Diverged { .. }) {
+    let diverged = matches!(ws.store.pull()?, PullOutcome::Diverged { .. });
+    if diverged {
         warnings.push("local context has unpushed commits; run `ctx-sync sync`".into());
     }
     if let Some(conflict) = ws.store.sync_state()?.conflict {
@@ -114,6 +119,13 @@ pub fn agent_start(rt: &Runtime, opts: AgentStartOptions) -> Result<AgentStartOu
         }
     }
 
+    // Pull cannot fast-forward a worktree with local commits. Read the latest
+    // remote snapshot separately so onboarding still includes other workers'
+    // updates, while retaining this worktree's unpushed worker and decisions.
+    if diverged {
+        snapshot = snapshot_with_remote_updates(rt, &ws, snapshot, identity.id)?;
+    }
+
     Ok(AgentStartOutcome {
         onboard: build_onboard_view(&snapshot, Some(identity.id), 5),
         attached,
@@ -121,4 +133,41 @@ pub fn agent_start(rt: &Runtime, opts: AgentStartOptions) -> Result<AgentStartOu
         resumed,
         warnings,
     })
+}
+
+fn snapshot_with_remote_updates(
+    rt: &Runtime,
+    ws: &Workspace,
+    local: ContextSnapshot,
+    own_id: Uuid,
+) -> Result<ContextSnapshot> {
+    let tmp = TempDirGuard::new(rt.state_root.tmp_dir().join(Uuid::new_v4().to_string()));
+    let state = StateRoot::new(tmp.path()).project(&Uuid::nil());
+    let store = rt.gist_store(&state, &ws.config.remote.id, ws.local.protocol);
+    store.ensure()?;
+    let mut remote = store.snapshot()?;
+
+    if let Some(own_worker) = local.workers.iter().find(|worker| worker.id == own_id) {
+        remote.workers.retain(|worker| worker.id != own_id);
+        remote.workers.push(own_worker.clone());
+        remote
+            .workers
+            .sort_by(|a, b| (&a.name, a.id).cmp(&(&b.name, b.id)));
+    }
+    for decision in local.decisions {
+        if !remote.decisions.iter().any(|item| item.id == decision.id) {
+            remote.decisions.push(decision);
+        }
+    }
+    remote.decisions.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(remote)
+}
+
+/// Publish this worker's handoff and synchronize the context repository.
+pub fn agent_finish(
+    ws: &Workspace,
+    input: HandoffInput,
+    now: DateTime<FixedOffset>,
+) -> Result<HandoffOutcome> {
+    handoff(ws, input, true, now)
 }
