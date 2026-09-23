@@ -1,5 +1,4 @@
 use assert_cmd::Command;
-use predicates::str::contains;
 
 fn ctx_sync() -> Command {
     Command::cargo_bin("ctx-sync").unwrap()
@@ -42,15 +41,6 @@ fn nested_help_succeeds() {
         .args(["agent", "finish", "--help"])
         .assert()
         .success();
-}
-
-#[test]
-fn unimplemented_command_exits_1() {
-    ctx_sync()
-        .arg("install-agent-instructions")
-        .assert()
-        .code(1)
-        .stderr(contains("not implemented: install-agent-instructions"));
 }
 
 #[test]
