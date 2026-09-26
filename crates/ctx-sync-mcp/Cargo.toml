@@ -1,0 +1,16 @@
+[package]
+name = "ctx-sync-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "ctx-sync-mcp"
+path = "src/main.rs"
+
+[dependencies]
+ctx-sync-core = { path = "../ctx-sync-core" }
+serde.workspace = true
+serde_json.workspace = true
