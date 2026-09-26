@@ -17,6 +17,8 @@ Before modifying the project, run:
 
     ctx-sync agent start
 
+In environments with MCP support, the equivalent ctx-sync tools may be used for these steps.
+
 Read the returned shared context before making changes.
 
 Check:
