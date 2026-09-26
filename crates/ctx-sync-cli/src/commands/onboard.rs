@@ -17,7 +17,10 @@ pub fn run(args: &OnboardArgs) -> Result<()> {
         &ws.store.snapshot()?,
         you,
         RECENT_LIMIT,
-        &ViewOptions::new(clock::now()?),
+        &ViewOptions {
+            now: clock::now()?,
+            stale_after: args.stale_after,
+        },
     );
     if args.json {
         let json = serde_json::to_string_pretty(&view)

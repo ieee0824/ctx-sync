@@ -229,6 +229,7 @@ name = "ctx-sync-cli"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
+ "chrono",
  "clap",
  "ctx-sync-core",
  "ctx-sync-testutil",

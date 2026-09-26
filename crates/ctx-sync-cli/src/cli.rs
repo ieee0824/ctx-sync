@@ -1,6 +1,8 @@
 //! Command line definition.
 
+use chrono::TimeDelta;
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use ctx_sync_core::model::parse_duration;
 
 #[derive(Parser)]
 #[command(
@@ -32,7 +34,7 @@ pub enum Command {
     /// Print onboarding context for a newly joining agent
     Onboard(OnboardArgs),
     /// Show project, sync and worker status
-    Status,
+    Status(StatusArgs),
     /// Update this worker's shared state
     Handoff(HandoffArgs),
     /// Manage decisions
@@ -92,12 +94,25 @@ pub struct RegisterArgs {
 pub struct ContextArgs {
     #[arg(long)]
     pub json: bool,
+    /// Treat active workers not updated for this long as stale (e.g. 90m, 24h, 3d)
+    #[arg(long, default_value = "24h", value_parser = parse_stale_after)]
+    pub stale_after: TimeDelta,
 }
 
 #[derive(Args)]
 pub struct OnboardArgs {
     #[arg(long)]
     pub json: bool,
+    /// Treat active workers not updated for this long as stale (e.g. 90m, 24h, 3d)
+    #[arg(long, default_value = "24h", value_parser = parse_stale_after)]
+    pub stale_after: TimeDelta,
+}
+
+#[derive(Args)]
+pub struct StatusArgs {
+    /// Treat active workers not updated for this long as stale (e.g. 90m, 24h, 3d)
+    #[arg(long, default_value = "24h", value_parser = parse_stale_after)]
+    pub stale_after: TimeDelta,
 }
 
 #[derive(Args, Clone, Default)]
@@ -227,6 +242,13 @@ pub struct AgentStartArgs {
     pub resume: bool,
     #[arg(long)]
     pub json: bool,
+    /// Treat active workers not updated for this long as stale (e.g. 90m, 24h, 3d)
+    #[arg(long, default_value = "24h", value_parser = parse_stale_after)]
+    pub stale_after: TimeDelta,
+}
+
+fn parse_stale_after(s: &str) -> Result<TimeDelta, String> {
+    parse_duration(s).map_err(|error| error.to_string())
 }
 
 #[derive(Args)]
