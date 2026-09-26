@@ -1,5 +1,6 @@
 //! Files stored in the context Gist.
 
+pub mod claim;
 pub mod decision;
 pub mod decisions;
 pub mod docs;
