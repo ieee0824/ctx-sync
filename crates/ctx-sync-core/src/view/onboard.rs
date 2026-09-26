@@ -34,6 +34,7 @@ pub struct WorkerBrief {
     /// Time since the last worker update, formatted for display.
     pub age: String,
     pub task: String,
+    pub claims: Vec<String>,
     /// Changed files, at most 10 (plus a `... and N more` line).
     pub files: Vec<String>,
 }
@@ -146,6 +147,9 @@ pub fn render_onboard_markdown(view: &OnboardView) -> String {
         if !you.task.is_empty() {
             lines.push(format!("Task: {}", first_line(&you.task)));
         }
+        if !you.claims.is_empty() {
+            lines.push(format!("Claims:\n{}", render_list(&you.claims)));
+        }
         blocks.push(lines.join("\n"));
     }
 
@@ -180,6 +184,9 @@ pub fn render_onboard_markdown(view: &OnboardView) -> String {
         ));
         if !w.task.is_empty() {
             blocks.push(format!("Task:\n{}", w.task));
+        }
+        if !w.claims.is_empty() {
+            blocks.push(format!("Claims:\n{}", render_list(&w.claims)));
         }
         if !w.files.is_empty() {
             blocks.push(format!("Files:\n{}", render_list(&w.files)));
@@ -232,6 +239,11 @@ fn brief(w: &Worker, opts: &ViewOptions) -> WorkerBrief {
         stale: is_stale(w, opts.now, opts.stale_after),
         age: format_age(opts.now.signed_duration_since(w.last_updated)),
         task: w.task.clone(),
+        claims: if w.status.is_active() {
+            w.claims.clone()
+        } else {
+            Vec::new()
+        },
         files,
     }
 }

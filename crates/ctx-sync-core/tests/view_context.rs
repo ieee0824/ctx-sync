@@ -141,3 +141,15 @@ fn stale_workers_are_visible_in_text_and_json() {
     assert_eq!(json["active_workers"][0]["age"], "3d");
     assert_eq!(json["active_workers"][1]["stale"], true);
 }
+
+#[test]
+fn active_claims_appear_in_context() {
+    let mut snapshot = common::snapshot();
+    snapshot.workers[1].claims = vec!["src/parser/**".into()];
+    snapshot.workers[0].claims = vec!["private/**".into()];
+    let view = build_context_view(&snapshot, &opts());
+    assert_eq!(view.active_workers[0].claims, ["src/parser/**"]);
+    let markdown = render_context_markdown(&view);
+    assert!(markdown.contains("Claims:\n- src/parser/**"));
+    assert!(!markdown.contains("private/**"));
+}

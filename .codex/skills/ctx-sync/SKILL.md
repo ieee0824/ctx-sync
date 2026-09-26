@@ -31,6 +31,8 @@ Avoid overlapping another active worker's work unless necessary.
 
 ## During work
 
+When your work area is clear, declare it with `ctx-sync claim <pattern>`; if it warns about an overlap, coordinate the scope with that worker.
+
 When making a durable project-level design or architecture decision, record it with:
 
     ctx-sync decision add ...

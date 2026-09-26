@@ -7,6 +7,7 @@ use crate::cli::Command;
 mod agent;
 mod attach;
 mod bootstrap;
+mod claim;
 mod conflict;
 mod context;
 mod decision;
@@ -32,6 +33,7 @@ pub fn dispatch(command: Command) -> Result<()> {
         Command::Onboard(args) => onboard::run(&args),
         Command::Status(args) => status::run(&args),
         Command::Handoff(args) => handoff::run(&args),
+        Command::Claim(args) => claim::run(&args),
         Command::Decision(command) => decision::run(&command),
         Command::Conflict(command) => conflict::run(&command),
         Command::Done(args) => done::run(&args),

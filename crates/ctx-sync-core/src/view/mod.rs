@@ -53,6 +53,7 @@ pub struct WorkerSummary {
     pub commit: Option<String>,
     pub task: String,
     pub working_on: Vec<String>,
+    pub claims: Vec<String>,
     pub changed: Vec<String>,
     pub interface_changes: Vec<String>,
     pub attention: Vec<String>,
@@ -73,6 +74,11 @@ impl WorkerSummary {
             commit: w.commit.clone(),
             task: w.task.clone(),
             working_on: w.working_on.clone(),
+            claims: if w.status.is_active() {
+                w.claims.clone()
+            } else {
+                Vec::new()
+            },
             changed: w.changed.clone(),
             interface_changes: w.interface_changes.clone(),
             attention: w.attention.clone(),
