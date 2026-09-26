@@ -54,6 +54,45 @@ impl Default for ContextFiles {
     }
 }
 
+impl ContextFiles {
+    /// Validate flat Markdown names that cannot overlap reserved context files.
+    pub fn validate(&self) -> Result<()> {
+        for (key, name) in [
+            ("context.project", &self.project),
+            ("context.architecture", &self.architecture),
+        ] {
+            let reason = if name.is_empty() {
+                Some("must not be empty")
+            } else if name.starts_with('.') {
+                Some("must not begin with '.'")
+            } else if !name.ends_with(".md") {
+                Some("must end with .md")
+            } else if name.starts_with("30-decision-")
+                || name.starts_with("40-worker-")
+                || name == "00-meta.json"
+            {
+                Some("uses a reserved context file name")
+            } else if !name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+            {
+                Some("must be flat and contain only ASCII letters, digits, '.', '_' or '-'")
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                return Err(Error::InvalidConfig(format!("{key} {name:?} {reason}")));
+            }
+        }
+        if self.project == self.architecture {
+            return Err(Error::InvalidConfig(
+                "context.project and context.architecture must use different file names".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 impl ProjectConfig {
     pub fn new_gist(gist_id: impl Into<String>) -> Self {
         Self {
@@ -95,12 +134,7 @@ impl ProjectConfig {
                 "remote.id in {CONFIG_FILE} is empty"
             )));
         }
-        if self.context != ContextFiles::default() {
-            return Err(Error::InvalidConfig(
-                "custom context file names are not supported in v0.1".into(),
-            ));
-        }
-        Ok(())
+        self.context.validate()
     }
 }
 
@@ -199,10 +233,51 @@ architecture = "20-architecture.md"
     }
 
     #[test]
-    fn rejects_custom_context_files() {
-        assert_invalid(&format!(
-            "{MINIMAL}\n[context]\nproject = \"p.md\"\narchitecture = \"20-architecture.md\"\n"
-        ));
+    fn accepts_custom_context_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write(
+            dir.path(),
+            &format!(
+                "{MINIMAL}\n[context]\nproject = \"overview.md\"\narchitecture = \"design.md\"\n"
+            ),
+        );
+        let config = ProjectConfig::load(&path).unwrap();
+        assert_eq!(config.context.project, "overview.md");
+        assert_eq!(config.context.architecture, "design.md");
+    }
+
+    #[test]
+    fn invalid_context_file_names_report_the_key_and_reason() {
+        for bad in [
+            "a/b.md",
+            "project.txt",
+            ".hidden.md",
+            "30-decision-x.md",
+            "40-worker-x.md",
+            "00-meta.json",
+            "a b.md",
+        ] {
+            let files = ContextFiles {
+                project: bad.into(),
+                architecture: "design.md".into(),
+            };
+            let error = files.validate().unwrap_err();
+            assert!(matches!(error, Error::InvalidConfig(_)));
+            assert!(error.to_string().contains("context.project"), "{error}");
+        }
+        let files = ContextFiles {
+            project: "overview.md".into(),
+            architecture: "a/b.md".into(),
+        };
+        let error = files.validate().unwrap_err();
+        assert!(error.to_string().contains("context.architecture"));
+        let files = ContextFiles {
+            project: "same.md".into(),
+            architecture: "same.md".into(),
+        };
+        let error = files.validate().unwrap_err();
+        assert!(matches!(error, Error::InvalidConfig(_)));
+        assert!(error.to_string().contains("different file names"));
     }
 
     #[test]
