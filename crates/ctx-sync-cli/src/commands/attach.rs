@@ -20,6 +20,9 @@ pub fn run(args: &AttachArgs) -> Result<()> {
             now: clock::now()?,
         },
     )?;
+    for warning in &outcome.warnings {
+        eprintln!("warning: {warning}");
+    }
     let config = if outcome.config_written {
         "created"
     } else {

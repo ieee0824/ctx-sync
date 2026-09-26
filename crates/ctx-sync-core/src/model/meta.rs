@@ -18,6 +18,10 @@ pub struct Meta {
     pub created_at: DateTime<FixedOffset>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ctx_sync_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_file: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub architecture_file: Option<String>,
 }
 
 impl Meta {
@@ -28,6 +32,8 @@ impl Meta {
             project_name: project_name.to_string(),
             created_at: now,
             ctx_sync_version: Some(crate::VERSION.to_string()),
+            project_file: None,
+            architecture_file: None,
         }
     }
 
