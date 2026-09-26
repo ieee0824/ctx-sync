@@ -11,7 +11,8 @@ pub mod worker;
 
 pub use decision::{DECISION_PREFIX, Decision, DecisionId, DecisionStatus, slugify};
 pub use decisions::{
-    DuplicateSeq, duplicate_decision_seqs, effective_decisions, next_decision_seq,
+    DuplicateSeq, Renumber, duplicate_decision_seqs, effective_decisions, next_decision_seq,
+    plan_renumber, renumber_decision,
 };
 pub use docs::{ARCHITECTURE_FILE, PROJECT_FILE};
 pub use md::{MdDoc, MdSection};
