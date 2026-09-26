@@ -146,6 +146,7 @@ fn render_worker(w: &WorkerSummary) -> String {
     }
     let lists = [
         ("Working On", &w.working_on),
+        ("Claims", &w.claims),
         ("Changed", &w.changed),
         ("Interface Changes", &w.interface_changes),
         ("Attention", &w.attention),

@@ -41,6 +41,7 @@ pub fn filter_context_view(mut view: ContextView, task: &str) -> ContextView {
         let fields = [
             worker.task.as_str(),
             &worker.working_on.join(" "),
+            &worker.claims.join(" "),
             &worker.changed.join(" "),
             &worker.interface_changes.join(" "),
             &worker.attention.join(" "),

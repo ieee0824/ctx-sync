@@ -107,6 +107,7 @@ A secret Gist is readable by anyone with its URL. Do not treat it as a secret st
 | `ctx-sync onboard` | Print a short onboarding view. |
 | `ctx-sync status` | Show project, sync, conflict, and worker status. |
 | `ctx-sync handoff` | Update your worker state with `--task`, `--summary`, `--status`, `--working-on`, `--changed`, `--interface-change`, `--attention`, or `--blocked-by`; use `--append` for lists and `--sync` to publish now. |
+| `ctx-sync claim [PATTERN]...` | List active claims, or declare paths such as `src/parser/**`; use `--release` to remove claims and `--sync` to publish now. Overlaps warn without blocking. |
 | `ctx-sync decision add <title>` | Add a decision with `--context`, `--decision`, `--reason`, `--consequences`, `--supersedes`, `--status`, and optional `--sync`. |
 | `ctx-sync done` | Mark this worker done and sync; accepts `--summary`. |
 | `ctx-sync agent start` | Pull and print onboarding context; use `--name` to register or `--resume` to continue a completed worker. |

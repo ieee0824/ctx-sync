@@ -154,3 +154,18 @@ fn stale_workers_are_marked_in_onboarding_and_json() {
     assert_eq!(json["active_workers"][0]["age"], "3d");
     assert_eq!(json["active_workers"][1]["stale"], true);
 }
+
+#[test]
+fn active_claims_appear_after_tasks() {
+    let mut snapshot = common::snapshot();
+    snapshot.workers[1].claims = vec!["src/parser/**".into()];
+    snapshot.workers[2].claims = vec!["src/ui/**".into()];
+    snapshot.workers[0].claims = vec!["private/**".into()];
+    let view = build_onboard_view(&snapshot, parser(), 5, &opts());
+    assert_eq!(view.you.as_ref().unwrap().claims, ["src/parser/**"]);
+    assert_eq!(view.active_workers[0].claims, ["src/ui/**"]);
+    let markdown = render_onboard_markdown(&view);
+    assert!(markdown.contains("Task:\nUI\n\nClaims:\n- src/ui/**"));
+    assert!(markdown.contains("Task: Parser implementation\nClaims:\n- src/parser/**"));
+    assert!(!markdown.contains("private/**"));
+}

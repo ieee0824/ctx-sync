@@ -120,6 +120,9 @@ pub fn render_status_text(view: &StatusView) -> String {
         if let Some(task) = w.task.lines().next().filter(|t| !t.is_empty()) {
             lines.push(format!("  task: {task}"));
         }
+        if !w.claims.is_empty() {
+            lines.push(format!("  claims: {}", w.claims.join(", ")));
+        }
         blocks.push(lines.join("\n"));
     }
 

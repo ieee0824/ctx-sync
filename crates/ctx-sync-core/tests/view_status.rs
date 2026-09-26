@@ -82,6 +82,24 @@ ui (33333333)
 }
 
 #[test]
+fn only_active_claims_appear_in_status() {
+    let mut snapshot = common::snapshot();
+    snapshot.workers[0].claims = vec!["private/**".into()];
+    snapshot.workers[1].claims = vec!["src/parser/**".into()];
+    let view = build_status_view(
+        &snapshot,
+        "0123456789abcdef",
+        Path::new(REPO),
+        sync_state(),
+        Some(&you()),
+        &opts(),
+    );
+    let text = render_status_text(&view);
+    assert!(text.contains("  claims: src/parser/**"));
+    assert!(!text.contains("private/**"));
+}
+
+#[test]
 fn shows_a_recorded_conflict_with_resolution_steps() {
     let mut sync = sync_state();
     sync.conflict = Some(ConflictRecord {

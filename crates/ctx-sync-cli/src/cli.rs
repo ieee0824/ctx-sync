@@ -39,6 +39,8 @@ pub enum Command {
     Status(StatusArgs),
     /// Update this worker's shared state
     Handoff(HandoffArgs),
+    /// List, add, or release advisory path claims
+    Claim(ClaimArgs),
     /// Manage decisions
     #[command(subcommand)]
     Decision(DecisionCommand),
@@ -151,6 +153,16 @@ pub struct HandoffArgs {
     #[command(flatten)]
     pub fields: HandoffFields,
     /// Sync after updating
+    #[arg(long)]
+    pub sync: bool,
+}
+
+#[derive(Args)]
+pub struct ClaimArgs {
+    /// Path patterns such as src/parser/** (none with --release: release all)
+    pub patterns: Vec<String>,
+    #[arg(long)]
+    pub release: bool,
     #[arg(long)]
     pub sync: bool,
 }
