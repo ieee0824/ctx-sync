@@ -3,6 +3,14 @@
 use std::path::Path;
 
 use ctx_sync_core::Error;
+use ctx_sync_core::clock;
+use ctx_sync_core::model::{default_stale_after, parse_duration};
+use ctx_sync_core::ops::{self, AgentStartOptions, Runtime, Workspace};
+use ctx_sync_core::store::ContextStore;
+use ctx_sync_core::view::{
+    ViewOptions, WorkerSummary, build_context_view, filter_context_view, render_context_markdown,
+    render_onboard_markdown,
+};
 use serde_json::{Value, json};
 
 fn property(kind: &str, description: &str) -> Value {
@@ -152,14 +160,119 @@ fn validate(name: &str, arguments: &Value) -> Result<(), Error> {
 }
 
 /// Returns None only for an unknown tool name.
-pub fn call_tool(_project_dir: &Path, name: &str, arguments: Value) -> Option<Value> {
+pub fn call_tool(project_dir: &Path, name: &str, arguments: Value) -> Option<Value> {
+    call_tool_with_runtime(project_dir, None, name, arguments)
+}
+
+pub fn call_tool_with_runtime(
+    project_dir: &Path,
+    runtime: Option<&Runtime>,
+    name: &str,
+    arguments: Value,
+) -> Option<Value> {
     if !tool_definitions().iter().any(|tool| tool["name"] == name) {
         return None;
     }
     if let Err(error) = validate(name, &arguments) {
         return Some(error_result(&error));
     }
-    Some(error_result(&Error::General(format!(
-        "not implemented: {name}"
-    ))))
+    let runtime = match runtime.cloned().map(Ok).unwrap_or_else(Runtime::from_env) {
+        Ok(runtime) => runtime,
+        Err(error) => return Some(error_result(&error)),
+    };
+    let result = match name {
+        "get_context" => get_context(project_dir, &runtime, &arguments),
+        "get_onboarding_context" => get_onboarding_context(project_dir, &runtime, &arguments),
+        "list_workers" => list_workers(project_dir, &runtime, &arguments),
+        _ => Err(Error::General(format!("not implemented: {name}"))),
+    };
+    Some(result.unwrap_or_else(|error| error_result(&error)))
+}
+
+fn success_result(text: String, structured: Value) -> Value {
+    json!({
+        "content": [{"type": "text", "text": text}],
+        "structuredContent": structured
+    })
+}
+
+fn get_context(project_dir: &Path, rt: &Runtime, args: &Value) -> Result<Value, Error> {
+    let ws = Workspace::open(rt, project_dir)?;
+    let mut warnings = Vec::new();
+    if args["pull"].as_bool().unwrap_or(true)
+        && let ctx_sync_core::store::PullOutcome::Diverged { ahead, behind } = ws.store.pull()?
+    {
+        warnings.push(format!(
+            "context diverged ({ahead} ahead, {behind} behind); run `ctx-sync sync`"
+        ));
+    }
+    let now = clock::now()?;
+    let stale_after = args["stale_after"]
+        .as_str()
+        .map(parse_duration)
+        .transpose()?
+        .unwrap_or_else(default_stale_after);
+    let snapshot = ws.store.snapshot()?;
+    let mut view = build_context_view(&snapshot, &ViewOptions { now, stale_after });
+    view.warnings.extend(warnings);
+    if let Some(task) = args["task"].as_str() {
+        view = filter_context_view(view, task);
+    }
+    let text = render_context_markdown(&view);
+    Ok(success_result(
+        text,
+        serde_json::to_value(view).expect("serializable context view"),
+    ))
+}
+
+fn get_onboarding_context(project_dir: &Path, rt: &Runtime, args: &Value) -> Result<Value, Error> {
+    let outcome = ops::agent_start(
+        rt,
+        AgentStartOptions {
+            cwd: project_dir.to_path_buf(),
+            name: args["name"].as_str().map(str::to_string),
+            resume: args["resume"].as_bool().unwrap_or(false),
+            now: clock::now()?,
+            stale_after: default_stale_after(),
+        },
+    )?;
+    let warnings = outcome
+        .warnings
+        .iter()
+        .map(|warning| format!("> warning: {warning}\n"))
+        .collect::<String>();
+    let text = format!("{warnings}{}", render_onboard_markdown(&outcome.onboard));
+    Ok(success_result(
+        text,
+        serde_json::to_value(outcome).expect("serializable onboarding outcome"),
+    ))
+}
+
+fn list_workers(project_dir: &Path, rt: &Runtime, args: &Value) -> Result<Value, Error> {
+    let ws = Workspace::open(rt, project_dir)?;
+    let snapshot = ws.store.snapshot()?;
+    let opts = ViewOptions::new(clock::now()?);
+    let workers: Vec<_> = snapshot
+        .workers
+        .iter()
+        .filter(|worker| {
+            args["include_inactive"].as_bool().unwrap_or(false) || worker.status.is_active()
+        })
+        .map(|worker| WorkerSummary::new(worker, &opts))
+        .collect();
+    let text = if workers.is_empty() {
+        "No workers.".into()
+    } else {
+        workers
+            .iter()
+            .map(|worker| {
+                format!(
+                    "{} ({}) {}: {}",
+                    worker.name, worker.short_id, worker.status, worker.task
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    Ok(success_result(text, json!({"workers": workers})))
 }

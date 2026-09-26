@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use ctx_sync_core::ops::Runtime;
 use serde_json::{Value, json};
 
 use crate::protocol;
@@ -9,11 +10,15 @@ use crate::tools;
 
 pub struct Server {
     pub project_dir: PathBuf,
+    pub runtime: Option<Runtime>,
 }
 
 impl Server {
     pub fn new(project_dir: PathBuf) -> Self {
-        Self { project_dir }
+        Self {
+            project_dir,
+            runtime: None,
+        }
     }
 
     /// Notifications have no response; requests return exactly one response.
@@ -56,7 +61,12 @@ impl Server {
                     .and_then(|params| params.get("arguments"))
                     .cloned()
                     .unwrap_or_else(|| json!({}));
-                match tools::call_tool(&self.project_dir, name, arguments) {
+                match tools::call_tool_with_runtime(
+                    &self.project_dir,
+                    self.runtime.as_ref(),
+                    name,
+                    arguments,
+                ) {
                     Some(result) => protocol::success(id, result),
                     None => protocol::error(id, -32602, &format!("Unknown tool: {name}")),
                 }
@@ -173,6 +183,6 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"get_context","arguments":{"unknown":1}}}"#,
         );
         assert_eq!(placeholder["result"]["isError"], true);
-        assert_eq!(placeholder["result"]["structuredContent"]["exit_code"], 1);
+        assert_eq!(placeholder["result"]["structuredContent"]["exit_code"], 4);
     }
 }

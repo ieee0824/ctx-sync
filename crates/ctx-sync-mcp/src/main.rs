@@ -3,11 +3,7 @@
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
-mod protocol;
-mod server;
-mod tools;
-
-use server::Server;
+use ctx_sync_mcp::server::Server;
 
 fn project_dir() -> Result<PathBuf, String> {
     let mut args = std::env::args_os().skip(1);
