@@ -66,6 +66,7 @@ Do not assume previous sandbox conversation history is available.
 
 ## Troubleshooting
 
+- Values that start with `-` must be passed as `--option=value`, for example `ctx-sync handoff --summary="-x flag removed"`. Otherwise the value is read as another option.
 - If `ctx-sync agent start` says the worker is not registered, run `ctx-sync agent start --name <short-name>`.
 - Exit code 2 is a context conflict. Do not resolve it yourself; report it to a human with the output of `ctx-sync status`.
 - Exit code 3 is an authentication error. Ask a human to fix git / GitHub authentication.
