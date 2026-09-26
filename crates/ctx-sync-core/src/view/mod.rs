@@ -13,6 +13,7 @@ pub mod conflict;
 pub mod context;
 pub mod decisions;
 pub mod onboard;
+pub mod relevance;
 pub mod status;
 
 pub use conflict::{ConflictFile, ConflictView, render_conflict_text};
@@ -22,6 +23,7 @@ pub use onboard::{
     DecisionBrief, OnboardView, RecentChange, WorkerBrief, build_onboard_view,
     render_onboard_markdown,
 };
+pub use relevance::{filter_context_view, relevance, task_tokens};
 pub use status::{StatusView, build_status_view, render_status_text};
 
 #[derive(Debug, Clone, Copy)]
