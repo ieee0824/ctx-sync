@@ -99,6 +99,9 @@ pub struct RegisterArgs {
 pub struct ContextArgs {
     #[arg(long)]
     pub json: bool,
+    /// Only include decisions and workers related to this task (keyword match)
+    #[arg(long)]
+    pub task: Option<String>,
     /// Treat active workers not updated for this long as stale (e.g. 90m, 24h, 3d)
     #[arg(long, default_value = "24h", value_parser = parse_stale_after)]
     pub stale_after: TimeDelta,
