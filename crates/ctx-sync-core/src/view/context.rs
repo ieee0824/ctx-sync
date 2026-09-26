@@ -25,6 +25,8 @@ pub struct DecisionSummary {
 pub struct ContextView {
     pub project_name: String,
     pub project_id: Uuid,
+    /// Some when this view has been filtered for a task.
+    pub task: Option<String>,
     /// `10-project.md` without its title.
     pub project: String,
     /// `20-architecture.md` without its title.
@@ -41,6 +43,7 @@ pub fn build_context_view(snapshot: &ContextSnapshot, opts: &ViewOptions) -> Con
     ContextView {
         project_name: snapshot.meta.project_name.clone(),
         project_id: snapshot.meta.project_id,
+        task: None,
         project: doc_body(&snapshot.project),
         architecture: doc_body(&snapshot.architecture),
         decisions: effective_decisions(&snapshot.decisions)
@@ -67,10 +70,16 @@ pub fn build_context_view(snapshot: &ContextSnapshot, opts: &ViewOptions) -> Con
 pub fn render_context_markdown(view: &ContextView) -> String {
     let mut blocks = vec![
         "# Shared Project Context".to_string(),
-        format!(
-            "Project: {}\nProject ID: {}",
-            view.project_name, view.project_id
-        ),
+        match &view.task {
+            Some(task) => format!(
+                "Project: {}\nProject ID: {}\nTask filter: {task}",
+                view.project_name, view.project_id
+            ),
+            None => format!(
+                "Project: {}\nProject ID: {}",
+                view.project_name, view.project_id
+            ),
+        },
         "## Project".to_string(),
         or_none(demote_headings(&view.project, 1)),
         "## Architecture".to_string(),
