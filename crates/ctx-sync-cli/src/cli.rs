@@ -138,6 +138,16 @@ pub enum WorkerStatusArg {
 pub enum DecisionCommand {
     /// Add a new decision
     Add(DecisionAddArgs),
+    /// List effective decisions, or all decisions with --all
+    List(DecisionListArgs),
+}
+
+#[derive(Args)]
+pub struct DecisionListArgs {
+    #[arg(long)]
+    pub all: bool,
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args)]
