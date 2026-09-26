@@ -1,6 +1,6 @@
 use ctx_sync_core::ops::{self, AgentStartOptions, Runtime, Workspace};
 use ctx_sync_core::view::render_onboard_markdown;
-use ctx_sync_core::{Result, clock};
+use ctx_sync_core::{Error, Result, clock};
 
 use crate::cli::{AgentCommand, AgentFinishArgs, AgentStartArgs};
 use crate::convert::handoff_input;
@@ -51,6 +51,12 @@ fn start(args: &AgentStartArgs) -> Result<()> {
     for warning in &outcome.warnings {
         eprintln!("warning: {warning}");
     }
-    print!("{}", render_onboard_markdown(&outcome.onboard));
+    if args.json {
+        let json = serde_json::to_string_pretty(&outcome)
+            .map_err(|e| Error::General(format!("cannot serialize agent start: {e}")))?;
+        println!("{json}");
+    } else {
+        print!("{}", render_onboard_markdown(&outcome.onboard));
+    }
     Ok(())
 }
