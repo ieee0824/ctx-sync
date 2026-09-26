@@ -7,6 +7,7 @@ use chrono::{DateTime, FixedOffset};
 use serde::Serialize;
 
 use super::Workspace;
+use super::claim::{changed_file_conflicts, conflict_warning};
 use crate::Result;
 use crate::ids::short_id;
 use crate::model::{Worker, WorkerStatus};
@@ -115,7 +116,7 @@ pub fn handoff(
     now: DateTime<FixedOffset>,
 ) -> Result<HandoffOutcome> {
     let identity = ws.require_identity()?;
-    let warnings = secret_warnings(&input);
+    let mut warnings = secret_warnings(&input);
     ws.store.ensure()?;
     let file_name = Worker::file_name_for(&identity.id);
     let current = match ws.store.read_file(&file_name)? {
@@ -125,6 +126,12 @@ pub fn handoff(
     let repo = repo_info::collect(&ws.root, &[])?;
     let mut updated = apply_handoff(&current, &input, &repo, now);
     updated.name = identity.name.clone();
+    let snapshot = ws.store.snapshot()?;
+    warnings.extend(
+        changed_file_conflicts(&updated.changed, identity.id, &snapshot.workers)
+            .iter()
+            .map(conflict_warning),
+    );
     ws.store.write_file(&file_name, &updated.render())?;
     let committed = ws
         .store

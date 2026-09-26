@@ -4,6 +4,7 @@ mod agent;
 mod agent_instructions;
 mod attach;
 mod bootstrap;
+mod claim;
 mod conflict;
 mod decision;
 mod handoff;
@@ -19,6 +20,10 @@ pub use agent_instructions::{
 };
 pub use attach::{AttachOptions, AttachOutcome, attach};
 pub use bootstrap::{BootstrapApplyOutcome, apply_bootstrap};
+pub use claim::{
+    ClaimConflict, ClaimInput, ClaimOutcome, changed_file_conflicts, claim, claim_conflicts,
+    conflict_warning,
+};
 pub use conflict::conflict_show;
 pub use decision::{DecisionAddOutcome, NewDecision, add_decision, supersede_decision};
 pub use handoff::{HandoffInput, HandoffOutcome, apply_handoff, handoff};
