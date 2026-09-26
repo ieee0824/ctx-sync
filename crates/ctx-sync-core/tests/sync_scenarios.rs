@@ -6,7 +6,7 @@ use std::path::Path;
 use chrono::{DateTime, NaiveDate};
 use ctx_sync_core::Error;
 use ctx_sync_core::git::Git;
-use ctx_sync_core::model::{Decision, DecisionId, DecisionStatus};
+use ctx_sync_core::model::{Decision, DecisionId, DecisionStatus, effective_decisions};
 use ctx_sync_core::state::{ConflictRecord, Protocol, StateRoot};
 use ctx_sync_core::store::{ContextStore, GistStore, RemoteSpec};
 use ctx_sync_testutil::TestRemote;
@@ -61,6 +61,26 @@ fn seeded_remote() -> TestRemote {
 
 fn exists(repo: &Path, name: &str) -> bool {
     repo.join(".git").join(name).exists()
+}
+
+fn write_decision(worker: &Worker, id: DecisionId, supersedes: Vec<DecisionId>) {
+    let decision = Decision {
+        date: NaiveDate::parse_from_str(id.date_str(), "%Y%m%d").unwrap(),
+        title: id.as_str().into(),
+        status: DecisionStatus::Accepted,
+        author: None,
+        supersedes,
+        context: String::new(),
+        decision: id.as_str().into(),
+        reason: String::new(),
+        consequences: String::new(),
+        extra_sections: vec![],
+        id,
+    };
+    worker
+        .store
+        .write_file(&decision.file_name(), &decision.render())
+        .unwrap();
 }
 
 #[test]
@@ -210,25 +230,12 @@ fn duplicate_decision_numbers_are_renumbered() {
     let remote = seeded_remote();
     let a = Worker::new(&remote);
     let b = Worker::new(&remote);
-    let date = NaiveDate::from_ymd_opt(2026, 9, 23).unwrap();
     for (worker, slug) in [(&a, "use-git"), (&b, "use-gist")] {
-        let decision = Decision {
-            id: DecisionId::new(date, 1, slug),
-            title: slug.into(),
-            status: DecisionStatus::Accepted,
-            date,
-            author: None,
-            supersedes: vec![],
-            context: String::new(),
-            decision: slug.into(),
-            reason: String::new(),
-            consequences: String::new(),
-            extra_sections: vec![],
-        };
-        worker
-            .store
-            .write_file(&decision.file_name(), &decision.render())
-            .unwrap();
+        write_decision(
+            worker,
+            DecisionId::parse(&format!("20260923-001-{slug}")).unwrap(),
+            vec![],
+        );
     }
     assert!(a.store.sync(now()).unwrap().warnings.is_empty());
     let outcome = b.store.sync(now()).unwrap();
@@ -237,6 +244,80 @@ fn duplicate_decision_numbers_are_renumbered() {
         outcome.warnings,
         ["renumbered decision 20260923-001-use-gist to 20260923-002-use-gist (duplicate number)"]
     );
+    assert!(
+        remote
+            .read_file("30-decision-20260923-001-use-git.md")
+            .is_some()
+    );
+    assert!(
+        remote
+            .read_file("30-decision-20260923-001-use-gist.md")
+            .is_none()
+    );
+    let renumbered = remote
+        .read_file("30-decision-20260923-002-use-gist.md")
+        .unwrap();
+    assert!(renumbered.contains("ID: 20260923-002-use-gist"));
+    assert!(remote.log()[0].contains("ctx-sync: renumber decisions"));
+}
+
+#[test]
+fn renumbering_updates_supersedes_and_effective_decisions() {
+    let remote = seeded_remote();
+    let a = Worker::new(&remote);
+    let b = Worker::new(&remote);
+    let a_id = DecisionId::parse("20260923-001-a").unwrap();
+    let b_id = DecisionId::parse("20260923-001-b").unwrap();
+    let c_id = DecisionId::parse("20260923-002-c").unwrap();
+    write_decision(&a, a_id.clone(), vec![]);
+    write_decision(&b, b_id.clone(), vec![]);
+    write_decision(&b, c_id.clone(), vec![b_id]);
+
+    a.store.sync(now()).unwrap();
+    let outcome = b.store.sync(now()).unwrap();
+    assert_eq!(
+        outcome.warnings,
+        ["renumbered decision 20260923-001-b to 20260923-003-b (duplicate number)"]
+    );
+
+    let new_b = "30-decision-20260923-003-b.md";
+    assert!(remote.read_file("30-decision-20260923-001-b.md").is_none());
+    let new_b_text = remote.read_file(new_b).unwrap();
+    assert!(new_b_text.contains("ID: 20260923-003-b"));
+    let c_text = remote.read_file("30-decision-20260923-002-c.md").unwrap();
+    assert!(c_text.contains("Supersedes: 20260923-003-b"));
+
+    let decisions = [
+        ("30-decision-20260923-001-a.md", a_id),
+        ("30-decision-20260923-002-c.md", c_id),
+        (new_b, DecisionId::parse("20260923-003-b").unwrap()),
+    ]
+    .map(|(name, id)| {
+        let decision = Decision::parse(name, &remote.read_file(name).unwrap()).unwrap();
+        assert_eq!(decision.id, id);
+        decision
+    });
+    let effective: Vec<_> = effective_decisions(&decisions)
+        .into_iter()
+        .map(|decision| decision.id.as_str())
+        .collect();
+    assert_eq!(effective, ["20260923-001-a", "20260923-002-c"]);
+}
+
+#[test]
+fn decisions_on_different_days_are_not_renumbered() {
+    let remote = seeded_remote();
+    let a = Worker::new(&remote);
+    let b = Worker::new(&remote);
+    write_decision(&a, DecisionId::parse("20260923-001-a").unwrap(), vec![]);
+    write_decision(&b, DecisionId::parse("20260924-001-b").unwrap(), vec![]);
+
+    assert!(a.store.sync(now()).unwrap().warnings.is_empty());
+    let outcome = b.store.sync(now()).unwrap();
+    assert!(outcome.warnings.is_empty());
+    assert!(remote.read_file("30-decision-20260923-001-a.md").is_some());
+    assert!(remote.read_file("30-decision-20260924-001-b.md").is_some());
+    assert!(!remote.log()[0].contains("ctx-sync: renumber decisions"));
 }
 
 #[test]
