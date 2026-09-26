@@ -30,7 +30,7 @@ pub enum Command {
     /// Print the full shared context
     Context(ContextArgs),
     /// Print onboarding context for a newly joining agent
-    Onboard,
+    Onboard(OnboardArgs),
     /// Show project, sync and worker status
     Status,
     /// Update this worker's shared state
@@ -94,6 +94,12 @@ pub struct ContextArgs {
     pub json: bool,
 }
 
+#[derive(Args)]
+pub struct OnboardArgs {
+    #[arg(long)]
+    pub json: bool,
+}
+
 #[derive(Args, Clone, Default)]
 pub struct HandoffFields {
     #[arg(long)]
@@ -138,6 +144,37 @@ pub enum WorkerStatusArg {
 pub enum DecisionCommand {
     /// Add a new decision
     Add(DecisionAddArgs),
+    /// List effective decisions, or all decisions with --all
+    List(DecisionListArgs),
+    /// Replace a decision by appending a new one
+    Supersede(DecisionSupersedeArgs),
+}
+
+#[derive(Args)]
+pub struct DecisionListArgs {
+    #[arg(long)]
+    pub all: bool,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args)]
+pub struct DecisionSupersedeArgs {
+    /// ID of the decision to replace
+    pub old: String,
+    pub title: String,
+    #[arg(long)]
+    pub context: Option<String>,
+    #[arg(long)]
+    pub decision: Option<String>,
+    #[arg(long)]
+    pub reason: Option<String>,
+    #[arg(long)]
+    pub consequences: Option<String>,
+    #[arg(long, value_enum, default_value = "accepted")]
+    pub status: DecisionStatusArg,
+    #[arg(long)]
+    pub sync: bool,
 }
 
 #[derive(Args)]
@@ -188,6 +225,8 @@ pub struct AgentStartArgs {
     /// Set status back to working if it is done/abandoned
     #[arg(long)]
     pub resume: bool,
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args)]
