@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 mod protocol;
 mod server;
+mod tools;
 
 use server::Server;
 
