@@ -20,6 +20,7 @@ pub const WORKER_PREFIX: &str = "40-worker-";
 const REPOSITORY: &str = "Repository";
 const TASK: &str = "Task";
 const WORKING_ON: &str = "Working On";
+const CLAIMS: &str = "Claims";
 const CHANGED: &str = "Changed";
 const INTERFACE_CHANGES: &str = "Interface Changes";
 const ATTENTION: &str = "Attention";
@@ -81,6 +82,7 @@ pub struct Worker {
     pub commit: Option<String>,
     pub task: String,
     pub working_on: Vec<String>,
+    pub claims: Vec<String>,
     pub changed: Vec<String>,
     pub interface_changes: Vec<String>,
     pub attention: Vec<String>,
@@ -101,6 +103,7 @@ impl Worker {
             commit: None,
             task: String::new(),
             working_on: Vec::new(),
+            claims: Vec::new(),
             changed: Vec::new(),
             interface_changes: Vec::new(),
             attention: Vec::new(),
@@ -156,6 +159,7 @@ impl Worker {
                 }
                 TASK => worker.task = section.body,
                 WORKING_ON => worker.working_on = parse_list(body),
+                CLAIMS => worker.claims = parse_list(body),
                 CHANGED => worker.changed = parse_list(body),
                 INTERFACE_CHANGES => worker.interface_changes = parse_list(body),
                 ATTENTION => worker.attention = parse_list(body),
@@ -182,6 +186,7 @@ impl Worker {
             section(REPOSITORY, repository),
             section(TASK, self.task.clone()),
             section(WORKING_ON, render_list(&self.working_on)),
+            section(CLAIMS, render_list(&self.claims)),
             section(CHANGED, render_list(&self.changed)),
             section(INTERFACE_CHANGES, render_list(&self.interface_changes)),
             section(ATTENTION, render_list(&self.attention)),
@@ -224,6 +229,7 @@ mod tests {
             commit: Some("abc1234".into()),
             task: "Parser を実装する。".into(),
             working_on: vec!["parser state machine".into(), "error handling".into()],
+            claims: vec!["src/parser/**".into(), "crates/*/Cargo.toml".into()],
             changed: vec!["src/parser.rs".into(), "src/error.rs".into()],
             interface_changes: vec!["ParserResult に warnings を追加".into()],
             attention: vec!["UI 側で ParserResult の変更への対応が必要".into()],
@@ -242,6 +248,7 @@ mod tests {
              ## Repository\n\nBranch: feat/parser\nCommit: abc1234\n\n\
              ## Task\n\nParser を実装する。\n\n\
              ## Working On\n\n- parser state machine\n- error handling\n\n\
+             ## Claims\n\n- src/parser/**\n- crates/*/Cargo.toml\n\n\
              ## Changed\n\n- src/parser.rs\n- src/error.rs\n\n"
         );
         assert!(text.starts_with(&expected_head), "{text}");
@@ -268,6 +275,7 @@ mod tests {
             "## Repository",
             "## Task",
             "## Working On",
+            "## Claims",
             "## Changed",
             "## Interface Changes",
             "## Attention",
@@ -277,6 +285,16 @@ mod tests {
             assert!(text.contains(heading), "{heading} missing:\n{text}");
         }
         assert_eq!(Worker::parse(&text).unwrap(), worker);
+    }
+
+    #[test]
+    fn parses_v01_worker_without_claims_section() {
+        let mut old = full();
+        old.claims.clear();
+        let old_format = old.render().replace("## Claims\n\n\n", "");
+        let parsed = Worker::parse(&old_format).unwrap();
+        assert!(parsed.claims.is_empty());
+        assert!(parsed.render().contains("## Claims\n"));
     }
 
     #[test]
