@@ -14,8 +14,11 @@ use crate::state::ProjectState;
 use crate::{Error, Result};
 
 mod pull;
+mod resolve;
 mod state;
 mod sync;
+
+pub use resolve::RebaseStrategy;
 
 /// Identity used for context commits when git has none configured
 /// (common in fresh sandboxes).

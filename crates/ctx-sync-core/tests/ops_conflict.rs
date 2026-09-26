@@ -1,6 +1,6 @@
 use chrono::{DateTime, FixedOffset};
 use ctx_sync_core::config::ProjectConfig;
-use ctx_sync_core::ops::{Workspace, conflict_show};
+use ctx_sync_core::ops::{Resolution, Workspace, conflict_resolve, conflict_show};
 use ctx_sync_core::state::{ConflictRecord, LocalProject, Protocol, StateRoot};
 use ctx_sync_core::store::{ContextStore, GistStore, RemoteSpec};
 use ctx_sync_core::view::render_conflict_text;
@@ -106,4 +106,28 @@ fn a_missing_commit_has_actionable_guidance() {
     record.save(a.ws.store.conflict_path()).unwrap();
     let error = conflict_show(&a.ws).unwrap_err();
     assert!(error.to_string().contains("run `ctx-sync pull`"));
+}
+
+#[test]
+fn keep_remote_resolves_a_recorded_conflict() {
+    let remote = TestRemote::new();
+    remote.seed_context("demo");
+    let a = fixture(&remote);
+    let b = fixture(&remote);
+    edit_architecture(&a.ws, "core-a");
+    edit_architecture(&b.ws, "core-b");
+    a.ws.store.sync(now()).unwrap();
+    assert_eq!(b.ws.store.sync(now()).unwrap_err().exit_code(), 2);
+
+    let outcome = conflict_resolve(&b.ws, Resolution::KeepRemote, now()).unwrap();
+    assert_eq!(outcome.resolution, "keep-remote");
+    assert_eq!(outcome.files, [ARCHITECTURE]);
+    assert!(
+        ConflictRecord::load(b.ws.store.conflict_path())
+            .unwrap()
+            .is_none()
+    );
+    let remote_text = remote.read_file(ARCHITECTURE).unwrap();
+    assert!(remote_text.contains("- core-a\n"));
+    assert!(!remote_text.contains("- core-b\n"));
 }

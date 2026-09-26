@@ -5,6 +5,7 @@ mod agent_instructions;
 mod attach;
 mod bootstrap;
 mod conflict;
+mod conflict_resolve;
 mod decision;
 mod handoff;
 mod init;
@@ -20,6 +21,7 @@ pub use agent_instructions::{
 pub use attach::{AttachOptions, AttachOutcome, attach};
 pub use bootstrap::{BootstrapApplyOutcome, apply_bootstrap};
 pub use conflict::conflict_show;
+pub use conflict_resolve::{Resolution, ResolveOutcome, conflict_resolve};
 pub use decision::{DecisionAddOutcome, NewDecision, add_decision, supersede_decision};
 pub use handoff::{HandoffInput, HandoffOutcome, apply_handoff, handoff};
 pub use init::{InitOptions, InitOutcome, InitRemote, init};
