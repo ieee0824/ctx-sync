@@ -6,7 +6,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use super::{
-    AttentionItem, WorkerSummary, collect_attention, doc_body, labeled, or_none,
+    AttentionItem, ViewOptions, WorkerSummary, collect_attention, doc_body, labeled, or_none,
     render_attention_item,
 };
 use crate::model::md::{demote_headings, render_list};
@@ -37,7 +37,7 @@ pub struct ContextView {
     pub warnings: Vec<String>,
 }
 
-pub fn build_context_view(snapshot: &ContextSnapshot) -> ContextView {
+pub fn build_context_view(snapshot: &ContextSnapshot, opts: &ViewOptions) -> ContextView {
     ContextView {
         project_name: snapshot.meta.project_name.clone(),
         project_id: snapshot.meta.project_id,
@@ -57,7 +57,7 @@ pub fn build_context_view(snapshot: &ContextSnapshot) -> ContextView {
             .workers
             .iter()
             .filter(|w| w.status.is_active())
-            .map(WorkerSummary::from)
+            .map(|w| WorkerSummary::new(w, opts))
             .collect(),
         attention: collect_attention(&snapshot.workers),
         warnings: snapshot.warnings.clone(),
@@ -123,7 +123,12 @@ pub fn render_context_markdown(view: &ContextView) -> String {
 
 /// Worker details; empty items are left out.
 fn render_worker(w: &WorkerSummary) -> String {
-    let mut lines = vec![format!("Status: {}", w.status)];
+    let status = if w.stale {
+        format!("{} (stale: last updated {} ago)", w.status, w.age)
+    } else {
+        w.status.to_string()
+    };
+    let mut lines = vec![format!("Status: {status}")];
     if let Some(branch) = &w.branch {
         lines.push(format!("Branch: {branch}"));
     }

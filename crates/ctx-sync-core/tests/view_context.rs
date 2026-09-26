@@ -1,6 +1,10 @@
 mod common;
 
-use ctx_sync_core::view::{build_context_view, render_context_markdown};
+use ctx_sync_core::view::{ViewOptions, build_context_view, render_context_markdown};
+
+fn opts() -> ViewOptions {
+    ViewOptions::new(common::time("2026-09-23T19:00:00+09:00"))
+}
 
 const EXPECTED: &str = "# Shared Project Context
 
@@ -66,20 +70,20 @@ Blocked By:
 
 #[test]
 fn renders_the_expected_markdown() {
-    let view = build_context_view(&common::snapshot());
+    let view = build_context_view(&common::snapshot(), &opts());
     assert_eq!(render_context_markdown(&view), EXPECTED);
 }
 
 #[test]
 fn only_effective_decisions_are_included() {
-    let view = build_context_view(&common::snapshot());
+    let view = build_context_view(&common::snapshot(), &opts());
     let ids: Vec<_> = view.decisions.iter().map(|d| d.id.as_str()).collect();
     assert_eq!(ids, ["20260923-002-use-git-transport"]);
 }
 
 #[test]
 fn done_workers_are_left_out() {
-    let view = build_context_view(&common::snapshot());
+    let view = build_context_view(&common::snapshot(), &opts());
     let names: Vec<_> = view
         .active_workers
         .iter()
@@ -93,7 +97,7 @@ fn done_workers_are_left_out() {
 
 #[test]
 fn embedded_headings_are_demoted() {
-    let markdown = render_context_markdown(&build_context_view(&common::snapshot()));
+    let markdown = render_context_markdown(&build_context_view(&common::snapshot(), &opts()));
     assert!(markdown.contains("\n### Goal\n"));
     assert!(!markdown.contains("\n## Goal\n"));
 }
@@ -105,7 +109,7 @@ fn empty_sections_say_none_and_warnings_are_listed() {
     snapshot.workers.clear();
     snapshot.architecture = ctx_sync_core::model::MdDoc::parse("# Architecture\n").unwrap();
     snapshot.warnings = vec!["skipped 40-worker-x.md: missing ID".into()];
-    let markdown = render_context_markdown(&build_context_view(&snapshot));
+    let markdown = render_context_markdown(&build_context_view(&snapshot, &opts()));
     assert!(markdown.contains("## Architecture\n\n_None_\n"));
     assert!(markdown.contains("## Accepted Decisions\n\n_None_\n"));
     assert!(markdown.contains("## Active Workers\n\n_None_\n"));
@@ -115,9 +119,25 @@ fn empty_sections_say_none_and_warnings_are_listed() {
 
 #[test]
 fn view_serializes_to_json() {
-    let view = build_context_view(&common::snapshot());
+    let view = build_context_view(&common::snapshot(), &opts());
     let json: serde_json::Value = serde_json::to_value(&view).unwrap();
     assert_eq!(json["decisions"].as_array().unwrap().len(), 1);
     assert_eq!(json["active_workers"][0]["status"], "working");
     assert_eq!(json["attention"][1]["kind"], "interface_change");
+}
+
+#[test]
+fn stale_workers_are_visible_in_text_and_json() {
+    let view = build_context_view(
+        &common::snapshot(),
+        &ViewOptions::new(common::time("2026-09-26T19:00:00+09:00")),
+    );
+    let markdown = render_context_markdown(&view);
+    assert!(markdown.contains("Status: working (stale: last updated 3d ago)"));
+    assert!(markdown.contains("Status: blocked (stale: last updated 3d ago)"));
+    assert!(!markdown.contains("### gist ("));
+    let json = serde_json::to_value(&view).unwrap();
+    assert_eq!(json["active_workers"][0]["stale"], true);
+    assert_eq!(json["active_workers"][0]["age"], "3d");
+    assert_eq!(json["active_workers"][1]["stale"], true);
 }
