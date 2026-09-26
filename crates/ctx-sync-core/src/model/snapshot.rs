@@ -3,10 +3,8 @@
 use std::io::ErrorKind;
 use std::path::Path;
 
-use super::{
-    ARCHITECTURE_FILE, DECISION_PREFIX, Decision, META_FILE, MdDoc, Meta, PROJECT_FILE,
-    WORKER_PREFIX, Worker,
-};
+use super::{DECISION_PREFIX, Decision, META_FILE, MdDoc, Meta, WORKER_PREFIX, Worker};
+use crate::config::ContextFiles;
 use crate::{Error, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,14 +18,23 @@ pub enum FileKind {
 }
 
 pub fn classify_file(name: &str) -> FileKind {
+    classify_file_with(name, &ContextFiles::default())
+}
+
+pub fn classify_file_with(name: &str, files: &ContextFiles) -> FileKind {
     let markdown_with = |prefix: &str| name.starts_with(prefix) && name.ends_with(".md");
-    match name {
-        META_FILE => FileKind::Meta,
-        PROJECT_FILE => FileKind::Project,
-        ARCHITECTURE_FILE => FileKind::Architecture,
-        _ if markdown_with(DECISION_PREFIX) => FileKind::Decision,
-        _ if markdown_with(WORKER_PREFIX) => FileKind::Worker,
-        _ => FileKind::Other,
+    if name == META_FILE {
+        FileKind::Meta
+    } else if name == files.project {
+        FileKind::Project
+    } else if name == files.architecture {
+        FileKind::Architecture
+    } else if markdown_with(DECISION_PREFIX) {
+        FileKind::Decision
+    } else if markdown_with(WORKER_PREFIX) {
+        FileKind::Worker
+    } else {
+        FileKind::Other
     }
 }
 
@@ -52,6 +59,11 @@ impl ContextSnapshot {
     /// architecture, decision or worker files are reported in `warnings` so
     /// that one bad file does not hide the rest of the context.
     pub fn load(dir: &Path) -> Result<Self> {
+        Self::load_with(dir, &ContextFiles::default())
+    }
+
+    pub fn load_with(dir: &Path, files: &ContextFiles) -> Result<Self> {
+        files.validate()?;
         let meta = match std::fs::read_to_string(dir.join(META_FILE)) {
             Ok(text) => Meta::parse(&text)?,
             Err(e) if e.kind() == ErrorKind::NotFound => {
@@ -63,8 +75,8 @@ impl ContextSnapshot {
         };
 
         let mut warnings = Vec::new();
-        let project = load_doc(dir, PROJECT_FILE, "Project", &mut warnings);
-        let architecture = load_doc(dir, ARCHITECTURE_FILE, "Architecture", &mut warnings);
+        let project = load_doc(dir, &files.project, "Project", &mut warnings);
+        let architecture = load_doc(dir, &files.architecture, "Architecture", &mut warnings);
 
         let mut names = Vec::new();
         for entry in std::fs::read_dir(dir)? {
@@ -83,7 +95,7 @@ impl ContextSnapshot {
         let mut decisions = Vec::new();
         let mut workers = Vec::new();
         for name in names {
-            let kind = classify_file(&name);
+            let kind = classify_file_with(&name, files);
             if !matches!(kind, FileKind::Decision | FileKind::Worker) {
                 continue;
             }
@@ -139,7 +151,7 @@ mod tests {
 
     use super::*;
     use crate::model::docs::{initial_architecture_md, initial_project_md};
-    use crate::model::{DecisionId, DecisionStatus};
+    use crate::model::{ARCHITECTURE_FILE, DecisionId, DecisionStatus, PROJECT_FILE};
 
     fn now() -> DateTime<FixedOffset> {
         DateTime::parse_from_rfc3339("2026-09-23T18:00:00+09:00").unwrap()
@@ -194,6 +206,37 @@ mod tests {
         let names: Vec<_> = snapshot.workers.iter().map(|w| w.name.as_str()).collect();
         assert_eq!(names, ["alpha", "zeta"]);
         assert!(snapshot.warnings.is_empty(), "{:?}", snapshot.warnings);
+    }
+
+    #[test]
+    fn custom_context_names_select_only_the_configured_documents() {
+        let dir = full_repo();
+        write(
+            dir.path(),
+            "overview.md",
+            "# Project\n\n## Goal\n\nCustom goal.\n",
+        );
+        write(
+            dir.path(),
+            "design.md",
+            "# Architecture\n\n## Components\n\n- custom\n",
+        );
+        let files = ContextFiles {
+            project: "overview.md".into(),
+            architecture: "design.md".into(),
+        };
+        let snapshot = ContextSnapshot::load_with(dir.path(), &files).unwrap();
+        assert_eq!(snapshot.project.section_body("Goal"), Some("Custom goal."));
+        assert_eq!(
+            snapshot.architecture.section_body("Components"),
+            Some("- custom")
+        );
+        assert_eq!(classify_file_with(PROJECT_FILE, &files), FileKind::Other);
+        assert_eq!(classify_file_with("overview.md", &files), FileKind::Project);
+        assert_eq!(
+            classify_file_with("design.md", &files),
+            FileKind::Architecture
+        );
     }
 
     #[test]

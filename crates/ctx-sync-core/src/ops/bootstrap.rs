@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use super::Workspace;
 use crate::bootstrap::BootstrapReport;
-use crate::model::{MdDoc, PROJECT_FILE};
+use crate::model::MdDoc;
 use crate::store::ContextStore;
 use crate::{Error, Result};
 
@@ -19,11 +19,12 @@ pub struct BootstrapApplyOutcome {
     pub committed: Option<String>,
 }
 
-/// Adds an `## Initial Context` section to `10-project.md` and commits it
+/// Adds an `## Initial Context` section to the configured project file and commits it
 /// (without syncing). An existing section is never overwritten.
 pub fn apply_bootstrap(ws: &Workspace, report: &BootstrapReport) -> Result<BootstrapApplyOutcome> {
     ws.store.ensure()?;
-    let mut doc = match ws.store.read_file(PROJECT_FILE)? {
+    let project_file = &ws.config.context.project;
+    let mut doc = match ws.store.read_file(project_file)? {
         Some(text) => MdDoc::parse(&text)?,
         None => MdDoc {
             title: "Project".into(),
@@ -32,14 +33,14 @@ pub fn apply_bootstrap(ws: &Workspace, report: &BootstrapReport) -> Result<Boots
     };
     if doc.section(SECTION).is_some() {
         return Err(Error::General(format!(
-            "{PROJECT_FILE} already has an {SECTION} section"
+            "{project_file} already has an {SECTION} section"
         )));
     }
     doc.set_section(SECTION, &report.render_section_body());
-    ws.store.write_file(PROJECT_FILE, &doc.render())?;
+    ws.store.write_file(project_file, &doc.render())?;
     let committed = ws.store.commit("ctx-sync: bootstrap")?;
     Ok(BootstrapApplyOutcome {
-        file_name: PROJECT_FILE.to_string(),
+        file_name: project_file.clone(),
         committed,
     })
 }

@@ -18,7 +18,7 @@ pub use decisions::{
 pub use docs::{ARCHITECTURE_FILE, PROJECT_FILE};
 pub use md::{MdDoc, MdSection};
 pub use meta::{META_FILE, Meta, SCHEMA_VERSION};
-pub use snapshot::{ContextSnapshot, FileKind, classify_file};
+pub use snapshot::{ContextSnapshot, FileKind, classify_file, classify_file_with};
 pub use stale::{
     DEFAULT_STALE_AFTER_HOURS, default_stale_after, format_age, is_stale, parse_duration,
 };

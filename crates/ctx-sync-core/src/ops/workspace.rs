@@ -39,7 +39,9 @@ impl Workspace {
         let local = LocalProject::load(&project_state.local_json())?
             .filter(|local| local.gist_id == gist_id)
             .ok_or_else(not_attached)?;
-        let store = rt.gist_store(&project_state, &gist_id, local.protocol);
+        let store = rt
+            .gist_store(&project_state, &gist_id, local.protocol)
+            .with_context_files(config.context.clone());
         Ok(Self {
             root,
             config,

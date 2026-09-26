@@ -8,6 +8,7 @@ use chrono::{DateTime, FixedOffset};
 use super::lock::{DEFAULT_LOCK_TIMEOUT, RepoLock};
 use super::remote::RemoteSpec;
 use super::{ContextStore, PullOutcome, SyncOutcome, SyncState};
+use crate::config::ContextFiles;
 use crate::git::Git;
 use crate::model::ContextSnapshot;
 use crate::state::ProjectState;
@@ -31,6 +32,7 @@ pub struct GistStore {
     conflict_path: PathBuf,
     remote: RemoteSpec,
     git_env: Vec<(String, String)>,
+    context_files: ContextFiles,
 }
 
 impl GistStore {
@@ -41,6 +43,7 @@ impl GistStore {
             conflict_path: state.conflict_json(),
             remote,
             git_env: Vec::new(),
+            context_files: ContextFiles::default(),
         }
     }
 
@@ -48,6 +51,15 @@ impl GistStore {
     pub fn with_git_env(mut self, env: Vec<(String, String)>) -> Self {
         self.git_env = env;
         self
+    }
+
+    pub fn with_context_files(mut self, files: ContextFiles) -> Self {
+        self.context_files = files;
+        self
+    }
+
+    pub fn context_files(&self) -> &ContextFiles {
+        &self.context_files
     }
 
     pub fn remote(&self) -> &RemoteSpec {
@@ -176,7 +188,7 @@ impl ContextStore for GistStore {
     }
 
     fn snapshot(&self) -> Result<ContextSnapshot> {
-        ContextSnapshot::load(&self.repo_dir)
+        ContextSnapshot::load_with(&self.repo_dir, &self.context_files)
     }
 
     fn read_file(&self, name: &str) -> Result<Option<String>> {
