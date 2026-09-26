@@ -9,11 +9,13 @@ use serde::Serialize;
 use crate::ids::short_id;
 use crate::model::{MdDoc, Worker, WorkerStatus, default_stale_after, format_age, is_stale};
 
+pub mod conflict;
 pub mod context;
 pub mod decisions;
 pub mod onboard;
 pub mod status;
 
+pub use conflict::{ConflictFile, ConflictView, render_conflict_text};
 pub use context::{ContextView, DecisionSummary, build_context_view, render_context_markdown};
 pub use decisions::{DecisionListItem, build_decision_list, render_decision_list};
 pub use onboard::{
