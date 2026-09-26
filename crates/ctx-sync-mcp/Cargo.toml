@@ -14,3 +14,6 @@ path = "src/main.rs"
 ctx-sync-core = { path = "../ctx-sync-core" }
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+ctx-sync-testutil = { path = "../ctx-sync-testutil" }

@@ -260,6 +260,7 @@ name = "ctx-sync-mcp"
 version = "0.1.0"
 dependencies = [
  "ctx-sync-core",
+ "ctx-sync-testutil",
  "serde",
  "serde_json",
 ]
