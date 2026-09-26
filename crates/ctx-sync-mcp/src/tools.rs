@@ -4,8 +4,10 @@ use std::path::Path;
 
 use ctx_sync_core::Error;
 use ctx_sync_core::clock;
-use ctx_sync_core::model::{default_stale_after, parse_duration};
-use ctx_sync_core::ops::{self, AgentStartOptions, Runtime, Workspace};
+use ctx_sync_core::model::{DecisionStatus, WorkerStatus, default_stale_after, parse_duration};
+use ctx_sync_core::ops::{
+    self, AgentStartOptions, HandoffInput, HandoffOutcome, NewDecision, Runtime, Workspace,
+};
 use ctx_sync_core::store::ContextStore;
 use ctx_sync_core::view::{
     ViewOptions, WorkerSummary, build_context_view, filter_context_view, render_context_markdown,
@@ -184,9 +186,20 @@ pub fn call_tool_with_runtime(
         "get_context" => get_context(project_dir, &runtime, &arguments),
         "get_onboarding_context" => get_onboarding_context(project_dir, &runtime, &arguments),
         "list_workers" => list_workers(project_dir, &runtime, &arguments),
+        "update_worker" => update_worker(project_dir, &runtime, &arguments, false),
+        "add_decision" => add_decision(project_dir, &runtime, &arguments),
+        "finish_worker" => update_worker(project_dir, &runtime, &arguments, true),
         _ => Err(Error::General(format!("not implemented: {name}"))),
     };
-    Some(result.unwrap_or_else(|error| error_result(&error)))
+    Some(result.unwrap_or_else(|error| {
+        let mut result = error_result(&error);
+        if matches!(error, Error::ContextConflict { .. }) {
+            let text = result["content"][0]["text"].as_str().unwrap_or_default();
+            result["content"][0]["text"] =
+                json!(format!("{text}\nrun ctx-sync status for details"));
+        }
+        result
+    }))
 }
 
 fn success_result(text: String, structured: Value) -> Value {
@@ -275,4 +288,140 @@ fn list_workers(project_dir: &Path, rt: &Runtime, args: &Value) -> Result<Value,
             .join("\n")
     };
     Ok(success_result(text, json!({"workers": workers})))
+}
+
+fn strings(args: &Value, key: &str) -> Vec<String> {
+    args[key]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn optional_strings(args: &Value, key: &str) -> Option<Vec<String>> {
+    let items = strings(args, key);
+    (!items.is_empty()).then_some(items)
+}
+
+fn handoff_input(args: &Value) -> HandoffInput {
+    let status = match args["status"].as_str() {
+        Some("working") => Some(WorkerStatus::Working),
+        Some("blocked") => Some(WorkerStatus::Blocked),
+        Some("done") => Some(WorkerStatus::Done),
+        Some("abandoned") => Some(WorkerStatus::Abandoned),
+        _ => None,
+    };
+    HandoffInput {
+        task: args["task"].as_str().map(str::to_string),
+        summary: args["summary"].as_str().map(str::to_string),
+        status,
+        working_on: optional_strings(args, "working_on"),
+        changed: optional_strings(args, "changed"),
+        interface_changes: optional_strings(args, "interface_changes"),
+        attention: optional_strings(args, "attention"),
+        blocked_by: optional_strings(args, "blocked_by"),
+        append: args["append"].as_bool().unwrap_or(false),
+    }
+}
+
+fn warnings_text(warnings: &[String], sync: Option<&ctx_sync_core::store::SyncOutcome>) -> String {
+    warnings
+        .iter()
+        .chain(sync.into_iter().flat_map(|outcome| outcome.warnings.iter()))
+        .map(|warning| format!("warning: {warning}\n"))
+        .collect()
+}
+
+fn update_worker(
+    project_dir: &Path,
+    rt: &Runtime,
+    args: &Value,
+    finish: bool,
+) -> Result<Value, Error> {
+    let ws = Workspace::open(rt, project_dir)?;
+    let input = handoff_input(args);
+    let now = clock::now()?;
+    let outcome = if finish {
+        ops::agent_finish(&ws, input, now)?
+    } else {
+        ops::handoff(&ws, input, args["sync"].as_bool().unwrap_or(false), now)?
+    };
+    let text = if finish {
+        format!(
+            "# Handoff Complete\n\nworker: {} ({})\nstatus: {}\nfile: {}\nrevision: {}\n",
+            outcome.worker_name,
+            outcome.short_id,
+            outcome.status,
+            outcome.file_name,
+            outcome.sync.as_ref().expect("finish always syncs").revision
+        )
+    } else {
+        handoff_text(&outcome)
+    };
+    let text = format!(
+        "{text}{}",
+        warnings_text(&outcome.warnings, outcome.sync.as_ref())
+    );
+    Ok(success_result(
+        text,
+        serde_json::to_value(outcome).expect("serializable handoff outcome"),
+    ))
+}
+
+fn handoff_text(outcome: &HandoffOutcome) -> String {
+    let committed = outcome.committed.as_deref().unwrap_or("no changes");
+    let synced = outcome
+        .sync
+        .as_ref()
+        .map(|sync| sync.revision.as_str())
+        .unwrap_or("no (run `ctx-sync sync`)");
+    format!(
+        "Updated worker {} ({})\n\nstatus: {}\nfile: {}\ncommitted: {committed}\nsynced: {synced}\n",
+        outcome.worker_name, outcome.short_id, outcome.status, outcome.file_name
+    )
+}
+
+fn add_decision(project_dir: &Path, rt: &Runtime, args: &Value) -> Result<Value, Error> {
+    let ws = Workspace::open(rt, project_dir)?;
+    let status = match args["status"].as_str().unwrap_or("accepted") {
+        "proposed" => DecisionStatus::Proposed,
+        "rejected" => DecisionStatus::Rejected,
+        _ => DecisionStatus::Accepted,
+    };
+    let input = NewDecision {
+        title: args["title"].as_str().expect("validated title").into(),
+        context: args["context"].as_str().map(str::to_string),
+        decision: args["decision"].as_str().map(str::to_string),
+        reason: args["reason"].as_str().map(str::to_string),
+        consequences: args["consequences"].as_str().map(str::to_string),
+        supersedes: strings(args, "supersedes"),
+        status,
+    };
+    let outcome = ops::add_decision(
+        &ws,
+        input,
+        args["sync"].as_bool().unwrap_or(false),
+        clock::now()?,
+    )?;
+    let committed = outcome.committed.as_deref().unwrap_or("no changes");
+    let synced = outcome
+        .sync
+        .as_ref()
+        .map(|sync| sync.revision.as_str())
+        .unwrap_or("no (run `ctx-sync sync`)");
+    let text = format!(
+        "Added decision\n\nid: {}\nfile: {}\ncommitted: {committed}\nsynced: {synced}\n{}",
+        outcome.id,
+        outcome.file_name,
+        warnings_text(&outcome.warnings, outcome.sync.as_ref())
+    );
+    Ok(success_result(
+        text,
+        serde_json::to_value(outcome).expect("serializable decision outcome"),
+    ))
 }
