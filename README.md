@@ -87,6 +87,41 @@ The [Codex skill](.codex/skills/ctx-sync/SKILL.md) gives agents the operating ru
 
 Run `ctx-sync install-agent-instructions` to add a Shared Context section to the project's `AGENTS.md`. It preserves existing instructions, and you can review the file before committing it.
 
+## MCP server
+
+Install the MCP server separately:
+
+```bash
+cargo install --git https://github.com/ieee0824/ctx-sync ctx-sync-mcp
+```
+
+Initialize or attach the project with the CLI before starting the server. The server reads the project's `.ctx-sync.toml` and uses the same local worker state as the CLI.
+
+For Codex, add this to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.ctx-sync]
+command = "ctx-sync-mcp"
+args = ["--project", "/path/to/project"]
+```
+
+For Claude Code:
+
+```bash
+claude mcp add ctx-sync -- ctx-sync-mcp --project /path/to/project
+```
+
+| MCP tool | CLI command |
+| --- | --- |
+| `get_context` | `ctx-sync context` (`--task` for filtering) |
+| `get_onboarding_context` | `ctx-sync agent start` |
+| `list_workers` | `ctx-sync status` |
+| `update_worker` | `ctx-sync handoff` |
+| `add_decision` | `ctx-sync decision add` |
+| `finish_worker` | `ctx-sync agent finish` |
+
+Tool responses contain readable text and structured results. Write tools commit locally by default; `update_worker` and `add_decision` accept `sync: true` to publish immediately. `finish_worker` always syncs.
+
 ## Security warning
 
 A secret Gist is readable by anyone with its URL. Do not treat it as a secret store. Never write credentials, tokens, API keys, environment secrets, or private keys into shared context.
