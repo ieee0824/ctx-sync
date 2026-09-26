@@ -5,10 +5,14 @@ use chrono::{DateTime, FixedOffset};
 use serde::Serialize;
 use uuid::Uuid;
 
-use super::{AttentionItem, collect_attention, doc_body, or_none, render_attention_item};
+use super::{
+    AttentionItem, ViewOptions, collect_attention, doc_body, or_none, render_attention_item,
+};
 use crate::ids::short_id;
 use crate::model::md::{demote_headings, render_list};
-use crate::model::{ContextSnapshot, Worker, WorkerStatus, effective_decisions};
+use crate::model::{
+    ContextSnapshot, Worker, WorkerStatus, effective_decisions, format_age, is_stale,
+};
 
 const MAX_SUMMARY_CHARS: usize = 120;
 const MAX_FILES: usize = 10;
@@ -26,6 +30,9 @@ pub struct WorkerBrief {
     pub name: String,
     pub short_id: String,
     pub status: WorkerStatus,
+    pub stale: bool,
+    /// Time since the last worker update, formatted for display.
+    pub age: String,
     pub task: String,
     /// Changed files, at most 10 (plus a `... and N more` line).
     pub files: Vec<String>,
@@ -61,6 +68,7 @@ pub fn build_onboard_view(
     snapshot: &ContextSnapshot,
     you: Option<Uuid>,
     recent_limit: usize,
+    opts: &ViewOptions,
 ) -> OnboardView {
     let section = |heading: &str| {
         snapshot
@@ -81,7 +89,13 @@ pub fn build_onboard_view(
         goal: section("Goal"),
         non_goals: section("Non Goals"),
         architecture: doc_body(&snapshot.architecture),
-        you: you.and_then(|id| snapshot.workers.iter().find(|w| w.id == id).map(brief)),
+        you: you.and_then(|id| {
+            snapshot
+                .workers
+                .iter()
+                .find(|w| w.id == id)
+                .map(|w| brief(w, opts))
+        }),
         important_decisions: effective_decisions(&snapshot.decisions)
             .into_iter()
             .map(|d| DecisionBrief {
@@ -94,7 +108,7 @@ pub fn build_onboard_view(
             .workers
             .iter()
             .filter(|w| w.status.is_active() && Some(w.id) != you)
-            .map(brief)
+            .map(|w| brief(w, opts))
             .collect(),
         needs_attention: collect_attention(&snapshot.workers),
         recent_changes: recent
@@ -123,7 +137,12 @@ pub fn render_onboard_markdown(view: &OnboardView) -> String {
 
     if let Some(you) = &view.you {
         blocks.push("## You".into());
-        let mut lines = vec![format!("{} ({}) — {}", you.name, you.short_id, you.status)];
+        let mut lines = vec![format!(
+            "{} ({}) — {}",
+            you.name,
+            you.short_id,
+            status_with_age(you)
+        )];
         if !you.task.is_empty() {
             lines.push(format!("Task: {}", first_line(&you.task)));
         }
@@ -153,7 +172,12 @@ pub fn render_onboard_markdown(view: &OnboardView) -> String {
         blocks.push("_None_".into());
     }
     for w in &view.active_workers {
-        blocks.push(format!("### {} ({}) — {}", w.name, w.short_id, w.status));
+        blocks.push(format!(
+            "### {} ({}) — {}",
+            w.name,
+            w.short_id,
+            status_with_age(w)
+        ));
         if !w.task.is_empty() {
             blocks.push(format!("Task:\n{}", w.task));
         }
@@ -196,7 +220,7 @@ pub fn render_onboard_markdown(view: &OnboardView) -> String {
     out
 }
 
-fn brief(w: &Worker) -> WorkerBrief {
+fn brief(w: &Worker, opts: &ViewOptions) -> WorkerBrief {
     let mut files: Vec<String> = w.changed.iter().take(MAX_FILES).cloned().collect();
     if w.changed.len() > MAX_FILES {
         files.push(format!("... and {} more", w.changed.len() - MAX_FILES));
@@ -205,8 +229,18 @@ fn brief(w: &Worker) -> WorkerBrief {
         name: w.name.clone(),
         short_id: short_id(&w.id),
         status: w.status,
+        stale: is_stale(w, opts.now, opts.stale_after),
+        age: format_age(opts.now.signed_duration_since(w.last_updated)),
         task: w.task.clone(),
         files,
+    }
+}
+
+fn status_with_age(worker: &WorkerBrief) -> String {
+    if worker.stale {
+        format!("{}, stale ({})", worker.status, worker.age)
+    } else {
+        worker.status.to_string()
     }
 }
 

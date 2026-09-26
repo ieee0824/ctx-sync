@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use uuid::Uuid;
 
-use super::WorkerSummary;
+use super::{ViewOptions, WorkerSummary};
 use crate::model::ContextSnapshot;
 use crate::state::WorkerIdentity;
 use crate::store::SyncState;
@@ -31,6 +31,7 @@ pub fn build_status_view(
     context_repo: &Path,
     sync: SyncState,
     you: Option<&WorkerIdentity>,
+    opts: &ViewOptions,
 ) -> StatusView {
     StatusView {
         project_name: snapshot.meta.project_name.clone(),
@@ -39,7 +40,11 @@ pub fn build_status_view(
         context_repo: context_repo.to_path_buf(),
         sync,
         you: you.map(|id| (id.name.clone(), id.short_id())),
-        workers: snapshot.workers.iter().map(WorkerSummary::from).collect(),
+        workers: snapshot
+            .workers
+            .iter()
+            .map(|w| WorkerSummary::new(w, opts))
+            .collect(),
         warnings: snapshot.warnings.clone(),
     }
 }
@@ -104,7 +109,11 @@ pub fn render_status_text(view: &StatusView) -> String {
     for w in &view.workers {
         let mut lines = vec![
             format!("{} ({})", w.name, w.short_id),
-            format!("  {}", w.status),
+            if w.stale {
+                format!("  {} (stale, {})", w.status, w.age)
+            } else {
+                format!("  {}", w.status)
+            },
         ];
         if let Some(branch) = &w.branch {
             lines.push(format!("  branch: {branch}"));

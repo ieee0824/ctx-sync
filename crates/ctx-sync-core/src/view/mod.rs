@@ -3,11 +3,11 @@
 //! Each view is built as a serializable struct from a `ContextSnapshot` and
 //! rendered separately, so that a `--json` output only needs `serde_json`.
 
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, FixedOffset, TimeDelta};
 use serde::Serialize;
 
 use crate::ids::short_id;
-use crate::model::{MdDoc, Worker, WorkerStatus};
+use crate::model::{MdDoc, Worker, WorkerStatus, default_stale_after, format_age, is_stale};
 
 pub mod context;
 pub mod decisions;
@@ -22,11 +22,29 @@ pub use onboard::{
 };
 pub use status::{StatusView, build_status_view, render_status_text};
 
+#[derive(Debug, Clone, Copy)]
+pub struct ViewOptions {
+    pub now: DateTime<FixedOffset>,
+    pub stale_after: TimeDelta,
+}
+
+impl ViewOptions {
+    pub fn new(now: DateTime<FixedOffset>) -> Self {
+        Self {
+            now,
+            stale_after: default_stale_after(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkerSummary {
     pub short_id: String,
     pub name: String,
     pub status: WorkerStatus,
+    pub stale: bool,
+    /// Time since the last worker update, formatted for display.
+    pub age: String,
     pub branch: Option<String>,
     pub commit: Option<String>,
     pub task: String,
@@ -39,12 +57,14 @@ pub struct WorkerSummary {
     pub last_updated: DateTime<FixedOffset>,
 }
 
-impl From<&Worker> for WorkerSummary {
-    fn from(w: &Worker) -> Self {
+impl WorkerSummary {
+    pub fn new(w: &Worker, opts: &ViewOptions) -> Self {
         Self {
             short_id: short_id(&w.id),
             name: w.name.clone(),
             status: w.status,
+            stale: is_stale(w, opts.now, opts.stale_after),
+            age: format_age(opts.now.signed_duration_since(w.last_updated)),
             branch: w.branch.clone(),
             commit: w.commit.clone(),
             task: w.task.clone(),

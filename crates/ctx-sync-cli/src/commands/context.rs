@@ -1,7 +1,7 @@
 use ctx_sync_core::ops::{Runtime, Workspace};
 use ctx_sync_core::store::ContextStore;
-use ctx_sync_core::view::{build_context_view, render_context_markdown};
-use ctx_sync_core::{Error, Result};
+use ctx_sync_core::view::{ViewOptions, build_context_view, render_context_markdown};
+use ctx_sync_core::{Error, Result, clock};
 
 use crate::cli::ContextArgs;
 
@@ -9,7 +9,7 @@ use crate::cli::ContextArgs;
 pub fn run(args: &ContextArgs) -> Result<()> {
     let rt = Runtime::from_env()?;
     let ws = Workspace::open(&rt, &std::env::current_dir()?)?;
-    let view = build_context_view(&ws.store.snapshot()?);
+    let view = build_context_view(&ws.store.snapshot()?, &ViewOptions::new(clock::now()?));
     if args.json {
         let json = serde_json::to_string_pretty(&view)
             .map_err(|e| Error::General(format!("cannot serialize context: {e}")))?;

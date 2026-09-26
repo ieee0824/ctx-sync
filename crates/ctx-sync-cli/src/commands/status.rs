@@ -1,7 +1,8 @@
 use ctx_sync_core::Result;
+use ctx_sync_core::clock;
 use ctx_sync_core::ops::{Runtime, Workspace};
 use ctx_sync_core::store::ContextStore;
-use ctx_sync_core::view::{build_status_view, render_status_text};
+use ctx_sync_core::view::{ViewOptions, build_status_view, render_status_text};
 
 /// Local information only: nothing is fetched.
 pub fn run() -> Result<()> {
@@ -16,6 +17,7 @@ pub fn run() -> Result<()> {
         ws.store.repo_dir(),
         sync,
         identity.as_ref(),
+        &ViewOptions::new(clock::now()?),
     );
     print!("{}", render_status_text(&view));
     Ok(())

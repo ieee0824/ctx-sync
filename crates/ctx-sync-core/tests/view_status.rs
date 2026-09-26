@@ -4,7 +4,7 @@ use std::path::Path;
 
 use ctx_sync_core::state::{ConflictRecord, WorkerIdentity};
 use ctx_sync_core::store::SyncState;
-use ctx_sync_core::view::{build_status_view, render_status_text};
+use ctx_sync_core::view::{ViewOptions, build_status_view, render_status_text};
 use uuid::Uuid;
 
 const REPO: &str = "/state/projects/6f1c2b7e-0000-4000-8000-000000000001/context-repo";
@@ -29,6 +29,10 @@ fn you() -> WorkerIdentity {
     }
 }
 
+fn opts() -> ViewOptions {
+    ViewOptions::new(common::time("2026-09-23T19:00:00+09:00"))
+}
+
 fn render(sync: SyncState, you: Option<&WorkerIdentity>) -> String {
     let view = build_status_view(
         &common::snapshot(),
@@ -36,6 +40,7 @@ fn render(sync: SyncState, you: Option<&WorkerIdentity>) -> String {
         Path::new(REPO),
         sync,
         you,
+        &opts(),
     );
     render_status_text(&view)
 }
@@ -120,7 +125,7 @@ fn unpushed_commits_suggest_sync() {
 fn unregistered_worktree_and_warnings() {
     let mut snapshot = common::snapshot();
     snapshot.warnings = vec!["skipped 40-worker-x.md: missing ID".into()];
-    let view = build_status_view(&snapshot, "g", Path::new(REPO), sync_state(), None);
+    let view = build_status_view(&snapshot, "g", Path::new(REPO), sync_state(), None, &opts());
     let text = render_status_text(&view);
     assert!(text.contains("You: not registered (run `ctx-sync register <name>`)"));
     assert!(
@@ -137,9 +142,32 @@ fn view_serializes_to_json() {
         Path::new(REPO),
         sync_state(),
         Some(&you()),
+        &opts(),
     );
     let json = serde_json::to_value(&view).unwrap();
     assert_eq!(json["workers"].as_array().unwrap().len(), 3);
     assert_eq!(json["sync"]["branch"], "main");
     assert_eq!(json["you"][0], "parser");
+}
+
+#[test]
+fn stale_workers_are_marked_in_text_and_json() {
+    let opts = ViewOptions::new(common::time("2026-09-26T19:00:00+09:00"));
+    let view = build_status_view(
+        &common::snapshot(),
+        "g",
+        Path::new(REPO),
+        sync_state(),
+        Some(&you()),
+        &opts,
+    );
+    let text = render_status_text(&view);
+    assert!(text.contains("  working (stale, 3d)"), "{text}");
+    assert!(text.contains("  blocked (stale, 3d)"), "{text}");
+    assert!(text.contains("gist (22222222)\n  done\n"), "{text}");
+
+    let json = serde_json::to_value(&view).unwrap();
+    assert_eq!(json["workers"][1]["stale"], true);
+    assert_eq!(json["workers"][1]["age"], "3d");
+    assert_eq!(json["workers"][0]["stale"], false);
 }

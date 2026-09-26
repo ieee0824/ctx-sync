@@ -14,7 +14,7 @@ use crate::fs_util::TempDirGuard;
 use crate::model::{ContextSnapshot, WorkerStatus};
 use crate::state::{Protocol, StateRoot};
 use crate::store::{ContextStore, PullOutcome};
-use crate::view::{OnboardView, build_onboard_view};
+use crate::view::{OnboardView, ViewOptions, build_onboard_view};
 use crate::{Error, Result};
 
 pub struct AgentStartOptions {
@@ -127,7 +127,7 @@ pub fn agent_start(rt: &Runtime, opts: AgentStartOptions) -> Result<AgentStartOu
     }
 
     Ok(AgentStartOutcome {
-        onboard: build_onboard_view(&snapshot, Some(identity.id), 5),
+        onboard: build_onboard_view(&snapshot, Some(identity.id), 5, &ViewOptions::new(opts.now)),
         attached,
         registered,
         resumed,
