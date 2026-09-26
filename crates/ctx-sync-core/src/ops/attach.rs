@@ -39,7 +39,7 @@ pub fn attach(rt: &Runtime, opts: AttachOptions) -> Result<AttachOutcome> {
     let gist_id = parse_gist_id(&opts.gist)?;
     let config_path = opts.project_root.join(CONFIG_FILE);
     let has_config = config_path.is_file();
-    if has_config {
+    let existing_context = if has_config {
         let config = ProjectConfig::load(&config_path)?;
         if config.remote.id != gist_id {
             return Err(Error::InvalidConfig(format!(
@@ -47,7 +47,10 @@ pub fn attach(rt: &Runtime, opts: AttachOptions) -> Result<AttachOutcome> {
                 config.remote.id
             )));
         }
-    }
+        Some(config.context)
+    } else {
+        None
+    };
 
     // The project id is only known after reading 00-meta.json, so clone
     // into a temporary location first.
@@ -65,7 +68,10 @@ pub fn attach(rt: &Runtime, opts: AttachOptions) -> Result<AttachOutcome> {
     };
 
     let state = rt.state_root.project(&meta.project_id);
-    let store = rt.gist_store(&state, &gist_id, opts.protocol);
+    let mut store = rt.gist_store(&state, &gist_id, opts.protocol);
+    if let Some(files) = existing_context {
+        store = store.with_context_files(files);
+    }
     if state.context_repo().join(".git").exists() {
         // Already cloned on this machine (e.g. another worktree): reuse it,
         // pointing it at the requested URL.
