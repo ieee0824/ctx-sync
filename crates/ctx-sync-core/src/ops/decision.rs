@@ -120,3 +120,49 @@ pub fn add_decision(
         warnings,
     })
 }
+
+/// Append a replacement decision, warning when the old decision is not effective.
+pub fn supersede_decision(
+    ws: &Workspace,
+    old: &str,
+    mut input: NewDecision,
+    sync: bool,
+    now: DateTime<FixedOffset>,
+) -> Result<DecisionAddOutcome> {
+    ws.require_identity()?;
+    ws.store.pull()?;
+    let snapshot = ws.store.snapshot()?;
+    let old_decision = snapshot
+        .decisions
+        .iter()
+        .find(|decision| decision.id.as_str() == old)
+        .ok_or_else(|| Error::General(format!("unknown decision id: {old}")))?;
+    let mut superseded_by: Vec<_> = snapshot
+        .decisions
+        .iter()
+        .filter(|decision| decision.supersedes.contains(&old_decision.id))
+        .map(|decision| decision.id.as_str())
+        .collect();
+    superseded_by.sort_unstable();
+    let warning = if !superseded_by.is_empty() {
+        Some(format!(
+            "decision {old} is not effective (superseded by {})",
+            superseded_by.join(", ")
+        ))
+    } else if old_decision.status != DecisionStatus::Accepted {
+        Some(format!(
+            "decision {old} is not effective (status {})",
+            old_decision.status
+        ))
+    } else {
+        None
+    };
+    if !input.supersedes.iter().any(|id| id == old) {
+        input.supersedes.insert(0, old.to_string());
+    }
+    let mut outcome = add_decision(ws, input, sync, now)?;
+    if let Some(warning) = warning {
+        outcome.warnings.push(warning);
+    }
+    Ok(outcome)
+}

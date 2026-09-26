@@ -140,6 +140,8 @@ pub enum DecisionCommand {
     Add(DecisionAddArgs),
     /// List effective decisions, or all decisions with --all
     List(DecisionListArgs),
+    /// Replace a decision by appending a new one
+    Supersede(DecisionSupersedeArgs),
 }
 
 #[derive(Args)]
@@ -148,6 +150,25 @@ pub struct DecisionListArgs {
     pub all: bool,
     #[arg(long)]
     pub json: bool,
+}
+
+#[derive(Args)]
+pub struct DecisionSupersedeArgs {
+    /// ID of the decision to replace
+    pub old: String,
+    pub title: String,
+    #[arg(long)]
+    pub context: Option<String>,
+    #[arg(long)]
+    pub decision: Option<String>,
+    #[arg(long)]
+    pub reason: Option<String>,
+    #[arg(long)]
+    pub consequences: Option<String>,
+    #[arg(long, value_enum, default_value = "accepted")]
+    pub status: DecisionStatusArg,
+    #[arg(long)]
+    pub sync: bool,
 }
 
 #[derive(Args)]
