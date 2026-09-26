@@ -5,11 +5,13 @@
 //! starts over. A rebase conflict is never resolved automatically: the
 //! rebase is aborted, the conflict is recorded and the command stops.
 
+use std::collections::{HashMap, HashSet};
+
 use chrono::{DateTime, FixedOffset};
 
 use super::GistStore;
 use crate::git::{GitFailure, classify, failure_to_error};
-use crate::model::duplicate_decision_seqs;
+use crate::model::{DecisionId, duplicate_decision_seqs, plan_renumber, renumber_decision};
 use crate::state::ConflictRecord;
 use crate::store::{ContextStore, SyncOutcome};
 use crate::{Error, Result};
@@ -23,18 +25,29 @@ pub(super) trait SyncOps {
     fn ahead_behind(&mut self) -> Result<(u32, u32)>;
     /// `Ok(None)` on success, `Ok(Some(files))` on a conflict (already aborted).
     fn rebase(&mut self) -> Result<Option<Vec<String>>>;
+    /// Run after a successful rebase, before recounting ahead commits.
+    fn after_rebase(&mut self) -> Result<Vec<String>>;
     /// `Ok(true)` on success, `Ok(false)` when rejected as non-fast-forward.
     fn push(&mut self) -> Result<bool>;
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum LoopResult {
-    Pushed { attempts: u32 },
-    NothingToPush { attempts: u32 },
-    Conflict { files: Vec<String> },
+    Pushed {
+        attempts: u32,
+        warnings: Vec<String>,
+    },
+    NothingToPush {
+        attempts: u32,
+        warnings: Vec<String>,
+    },
+    Conflict {
+        files: Vec<String>,
+    },
 }
 
 pub(super) fn sync_loop(ops: &mut impl SyncOps) -> Result<LoopResult> {
+    let mut warnings = Vec::new();
     for attempt in 1..=MAX_ATTEMPTS {
         ops.fetch()?;
         let (mut ahead, behind) = ops.ahead_behind()?;
@@ -42,13 +55,20 @@ pub(super) fn sync_loop(ops: &mut impl SyncOps) -> Result<LoopResult> {
             if let Some(files) = ops.rebase()? {
                 return Ok(LoopResult::Conflict { files });
             }
+            warnings.extend(ops.after_rebase()?);
             ahead = ops.ahead_behind()?.0;
         }
         if ahead == 0 {
-            return Ok(LoopResult::NothingToPush { attempts: attempt });
+            return Ok(LoopResult::NothingToPush {
+                attempts: attempt,
+                warnings,
+            });
         }
         if ops.push()? {
-            return Ok(LoopResult::Pushed { attempts: attempt });
+            return Ok(LoopResult::Pushed {
+                attempts: attempt,
+                warnings,
+            });
         }
     }
     Err(Error::SyncRetryExceeded)
@@ -63,9 +83,9 @@ pub(super) fn sync(store: &GistStore, now: DateTime<FixedOffset>) -> Result<Sync
         branch: store.branch()?,
         conflict_heads: None,
     };
-    let (pushed, attempts) = match sync_loop(&mut ops)? {
-        LoopResult::Pushed { attempts } => (true, attempts),
-        LoopResult::NothingToPush { attempts } => (false, attempts),
+    let (pushed, attempts, mut warnings) = match sync_loop(&mut ops)? {
+        LoopResult::Pushed { attempts, warnings } => (true, attempts, warnings),
+        LoopResult::NothingToPush { attempts, warnings } => (false, attempts, warnings),
         LoopResult::Conflict { files } => {
             let (local_head, remote_head) = ops.conflict_heads.take().unwrap_or_default();
             ConflictRecord {
@@ -79,12 +99,13 @@ pub(super) fn sync(store: &GistStore, now: DateTime<FixedOffset>) -> Result<Sync
         }
     };
     ConflictRecord::clear(store.conflict_path())?;
+    warnings.extend(duplicate_warnings(store));
     Ok(SyncOutcome {
         committed,
         pushed,
         revision: store.short_head()?,
         attempts,
-        warnings: duplicate_warnings(store),
+        warnings,
     })
 }
 
@@ -156,6 +177,58 @@ impl SyncOps for GitSyncOps<'_> {
         Ok(Some(files))
     }
 
+    fn after_rebase(&mut self) -> Result<Vec<String>> {
+        let remote = format!("origin/{}", self.branch);
+        let names = self
+            .store
+            .git()
+            .run_checked(&["ls-tree", "--name-only", &remote])?;
+        let remote_ids: HashSet<DecisionId> = names
+            .lines()
+            .filter_map(DecisionId::from_file_name)
+            .collect();
+        let snapshot = self.store.snapshot()?;
+        let local_only: HashSet<DecisionId> = snapshot
+            .decisions
+            .iter()
+            .filter(|decision| !remote_ids.contains(&decision.id))
+            .map(|decision| decision.id.clone())
+            .collect();
+        let plan = plan_renumber(&snapshot.decisions, &local_only);
+        if plan.is_empty() {
+            return Ok(Vec::new());
+        }
+        let map: HashMap<DecisionId, DecisionId> = plan
+            .iter()
+            .map(|change| (change.from.clone(), change.to.clone()))
+            .collect();
+        for decision in snapshot
+            .decisions
+            .iter()
+            .filter(|decision| local_only.contains(&decision.id))
+        {
+            let new_id = map.get(&decision.id).unwrap_or(&decision.id);
+            let changed = renumber_decision(decision, new_id, &map);
+            if changed != *decision {
+                self.store
+                    .write_file(&changed.file_name(), &changed.render())?;
+                if new_id != &decision.id {
+                    std::fs::remove_file(self.store.repo_dir().join(decision.file_name()))?;
+                }
+            }
+        }
+        self.store.commit_unlocked("ctx-sync: renumber decisions")?;
+        Ok(plan
+            .into_iter()
+            .map(|change| {
+                format!(
+                    "renumbered decision {} to {} (duplicate number)",
+                    change.from, change.to
+                )
+            })
+            .collect())
+    }
+
     fn push(&mut self) -> Result<bool> {
         let refspec = format!("HEAD:{}", self.branch);
         // Git hooks are not skipped.
@@ -189,6 +262,8 @@ mod tests {
         fetches: u32,
         rebases: u32,
         pushes: u32,
+        after_rebases: u32,
+        after_rebase_warnings: Vec<String>,
     }
 
     impl SyncOps for FakeOps {
@@ -206,6 +281,11 @@ mod tests {
             Ok(self.rebase_conflict.clone())
         }
 
+        fn after_rebase(&mut self) -> Result<Vec<String>> {
+            self.after_rebases += 1;
+            Ok(self.after_rebase_warnings.clone())
+        }
+
         fn push(&mut self) -> Result<bool> {
             self.pushes += 1;
             Ok(self.push_results.remove(0))
@@ -221,9 +301,13 @@ mod tests {
         };
         assert_eq!(
             sync_loop(&mut ops).unwrap(),
-            LoopResult::Pushed { attempts: 1 }
+            LoopResult::Pushed {
+                attempts: 1,
+                warnings: vec![],
+            }
         );
         assert_eq!((ops.fetches, ops.rebases, ops.pushes), (1, 0, 1));
+        assert_eq!(ops.after_rebases, 0);
     }
 
     #[test]
@@ -231,13 +315,18 @@ mod tests {
         let mut ops = FakeOps {
             ahead_behind: vec![(1, 0), (1, 1), (1, 0)],
             push_results: vec![false, true],
+            after_rebase_warnings: vec!["renumbered decision old to new (duplicate number)".into()],
             ..Default::default()
         };
         assert_eq!(
             sync_loop(&mut ops).unwrap(),
-            LoopResult::Pushed { attempts: 2 }
+            LoopResult::Pushed {
+                attempts: 2,
+                warnings: ops.after_rebase_warnings.clone(),
+            }
         );
         assert_eq!((ops.fetches, ops.rebases, ops.pushes), (2, 1, 2));
+        assert_eq!(ops.after_rebases, 1);
     }
 
     #[test]
@@ -267,6 +356,7 @@ mod tests {
             }
         );
         assert_eq!(ops.pushes, 0);
+        assert_eq!(ops.after_rebases, 0);
     }
 
     #[test]
@@ -277,7 +367,10 @@ mod tests {
         };
         assert_eq!(
             sync_loop(&mut ops).unwrap(),
-            LoopResult::NothingToPush { attempts: 1 }
+            LoopResult::NothingToPush {
+                attempts: 1,
+                warnings: vec![],
+            }
         );
         assert_eq!(ops.pushes, 0);
     }
@@ -290,8 +383,11 @@ mod tests {
         };
         assert_eq!(
             sync_loop(&mut ops).unwrap(),
-            LoopResult::NothingToPush { attempts: 1 }
+            LoopResult::NothingToPush {
+                attempts: 1,
+                warnings: vec![],
+            }
         );
-        assert_eq!((ops.rebases, ops.pushes), (1, 0));
+        assert_eq!((ops.rebases, ops.after_rebases, ops.pushes), (1, 1, 0));
     }
 }

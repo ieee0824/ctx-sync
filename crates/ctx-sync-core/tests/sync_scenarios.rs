@@ -206,7 +206,7 @@ fn conflict_can_be_resolved_manually() {
 }
 
 #[test]
-fn duplicate_decision_numbers_are_warned_about() {
+fn duplicate_decision_numbers_are_renumbered() {
     let remote = seeded_remote();
     let a = Worker::new(&remote);
     let b = Worker::new(&remote);
@@ -235,7 +235,7 @@ fn duplicate_decision_numbers_are_warned_about() {
     assert!(outcome.pushed);
     assert_eq!(
         outcome.warnings,
-        ["duplicate decision number 20260923-001: 20260923-001-use-gist, 20260923-001-use-git"]
+        ["renumbered decision 20260923-001-use-gist to 20260923-002-use-gist (duplicate number)"]
     );
 }
 
