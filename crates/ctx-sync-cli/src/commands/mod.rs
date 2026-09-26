@@ -29,7 +29,7 @@ pub fn dispatch(command: Command) -> Result<()> {
         Command::Sync => sync::run(),
         Command::Context(args) => context::run(&args),
         Command::Onboard(args) => onboard::run(&args),
-        Command::Status => status::run(),
+        Command::Status(args) => status::run(&args),
         Command::Handoff(args) => handoff::run(&args),
         Command::Decision(command) => decision::run(&command),
         Command::Done(args) => done::run(&args),

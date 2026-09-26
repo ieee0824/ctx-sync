@@ -9,7 +9,13 @@ use crate::cli::ContextArgs;
 pub fn run(args: &ContextArgs) -> Result<()> {
     let rt = Runtime::from_env()?;
     let ws = Workspace::open(&rt, &std::env::current_dir()?)?;
-    let view = build_context_view(&ws.store.snapshot()?, &ViewOptions::new(clock::now()?));
+    let view = build_context_view(
+        &ws.store.snapshot()?,
+        &ViewOptions {
+            now: clock::now()?,
+            stale_after: args.stale_after,
+        },
+    );
     if args.json {
         let json = serde_json::to_string_pretty(&view)
             .map_err(|e| Error::General(format!("cannot serialize context: {e}")))?;

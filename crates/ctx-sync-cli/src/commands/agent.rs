@@ -46,6 +46,7 @@ fn start(args: &AgentStartArgs) -> Result<()> {
             name: args.name.clone(),
             resume: args.resume,
             now: clock::now()?,
+            stale_after: args.stale_after,
         },
     )?;
     for warning in &outcome.warnings {

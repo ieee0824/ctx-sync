@@ -4,8 +4,10 @@ use ctx_sync_core::ops::{Runtime, Workspace};
 use ctx_sync_core::store::ContextStore;
 use ctx_sync_core::view::{ViewOptions, build_status_view, render_status_text};
 
+use crate::cli::StatusArgs;
+
 /// Local information only: nothing is fetched.
-pub fn run() -> Result<()> {
+pub fn run(args: &StatusArgs) -> Result<()> {
     let rt = Runtime::from_env()?;
     let ws = Workspace::open(&rt, &std::env::current_dir()?)?;
     let snapshot = ws.store.snapshot()?;
@@ -17,7 +19,10 @@ pub fn run() -> Result<()> {
         ws.store.repo_dir(),
         sync,
         identity.as_ref(),
-        &ViewOptions::new(clock::now()?),
+        &ViewOptions {
+            now: clock::now()?,
+            stale_after: args.stale_after,
+        },
     );
     print!("{}", render_status_text(&view));
     Ok(())

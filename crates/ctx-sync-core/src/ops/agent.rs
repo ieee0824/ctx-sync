@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, FixedOffset, TimeDelta};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -22,6 +22,7 @@ pub struct AgentStartOptions {
     pub name: Option<String>,
     pub resume: bool,
     pub now: DateTime<FixedOffset>,
+    pub stale_after: TimeDelta,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -127,7 +128,15 @@ pub fn agent_start(rt: &Runtime, opts: AgentStartOptions) -> Result<AgentStartOu
     }
 
     Ok(AgentStartOutcome {
-        onboard: build_onboard_view(&snapshot, Some(identity.id), 5, &ViewOptions::new(opts.now)),
+        onboard: build_onboard_view(
+            &snapshot,
+            Some(identity.id),
+            5,
+            &ViewOptions {
+                now: opts.now,
+                stale_after: opts.stale_after,
+            },
+        ),
         attached,
         registered,
         resumed,
