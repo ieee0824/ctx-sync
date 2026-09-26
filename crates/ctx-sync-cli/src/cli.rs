@@ -1,5 +1,7 @@
 //! Command line definition.
 
+use std::path::PathBuf;
+
 use chrono::TimeDelta;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use ctx_sync_core::model::parse_duration;
@@ -40,6 +42,9 @@ pub enum Command {
     /// Manage decisions
     #[command(subcommand)]
     Decision(DecisionCommand),
+    /// Inspect or resolve a recorded context conflict
+    #[command(subcommand)]
+    Conflict(ConflictCommand),
     /// Mark this worker as done
     Done(DoneArgs),
     /// High level commands for AI agents
@@ -209,6 +214,42 @@ pub struct DecisionAddArgs {
     pub status: DecisionStatusArg,
     #[arg(long)]
     pub sync: bool,
+}
+
+#[derive(Subcommand)]
+pub enum ConflictCommand {
+    /// Show the recorded context conflict
+    Show(ConflictShowArgs),
+    /// Resolve the recorded context conflict and sync
+    Resolve(ConflictResolveArgs),
+}
+
+#[derive(Args)]
+pub struct ConflictShowArgs {
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args)]
+#[command(group(clap::ArgGroup::new("how").required(true).args(["keep_local", "keep_remote", "merged"])))]
+pub struct ConflictResolveArgs {
+    #[arg(long)]
+    pub keep_local: bool,
+    #[arg(long)]
+    pub keep_remote: bool,
+    /// FILE=PATH: use the content of PATH as the resolved FILE
+    #[arg(long, value_parser = parse_merged)]
+    pub merged: Vec<(String, PathBuf)>,
+}
+
+fn parse_merged(value: &str) -> Result<(String, PathBuf), String> {
+    let (file, path) = value
+        .split_once('=')
+        .ok_or_else(|| "expected FILE=PATH".to_string())?;
+    if file.is_empty() || path.is_empty() {
+        return Err("expected FILE=PATH".into());
+    }
+    Ok((file.into(), path.into()))
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]

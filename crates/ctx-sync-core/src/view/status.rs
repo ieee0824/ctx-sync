@@ -87,13 +87,12 @@ pub fn render_status_text(view: &StatusView) -> String {
         )];
         lines.extend(conflict.files.iter().map(|f| format!("  {f}")));
         lines.push(String::new());
-        lines.push("  Resolve manually in the context repo:".into());
-        lines.push(format!("    cd {}", view.context_repo.display()));
-        lines.push(format!(
-            "    git rebase origin/{}   # fix the conflicts, then `git rebase --continue`",
-            sync.branch
-        ));
-        lines.push("    ctx-sync sync".into());
+        lines.push("  Resolve it with one of:".into());
+        lines.push("    ctx-sync conflict show".into());
+        lines.push(
+            "    ctx-sync conflict resolve --keep-local | --keep-remote | --merged <FILE>=<PATH>"
+                .into(),
+        );
         blocks.push(lines.join("\n"));
     }
 
