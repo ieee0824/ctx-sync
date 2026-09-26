@@ -20,6 +20,7 @@ mod pull;
 mod register;
 mod status;
 mod sync;
+mod worker;
 
 pub fn dispatch(command: Command) -> Result<()> {
     match command {
@@ -32,6 +33,7 @@ pub fn dispatch(command: Command) -> Result<()> {
         Command::Context(args) => context::run(&args),
         Command::Onboard(args) => onboard::run(&args),
         Command::Status(args) => status::run(&args),
+        Command::Worker(command) => worker::run(&command),
         Command::Handoff(args) => handoff::run(&args),
         Command::Claim(args) => claim::run(&args),
         Command::Decision(command) => decision::run(&command),

@@ -37,6 +37,9 @@ pub enum Command {
     Onboard(OnboardArgs),
     /// Show project, sync and worker status
     Status(StatusArgs),
+    /// Maintain shared worker files
+    #[command(subcommand)]
+    Worker(WorkerCommand),
     /// Update this worker's shared state
     Handoff(HandoffArgs),
     /// List, add, or release advisory path claims
@@ -123,6 +126,23 @@ pub struct StatusArgs {
     /// Treat active workers not updated for this long as stale (e.g. 90m, 24h, 3d)
     #[arg(long, default_value = "24h", value_parser = parse_stale_after)]
     pub stale_after: TimeDelta,
+}
+
+#[derive(Subcommand)]
+pub enum WorkerCommand {
+    /// Remove finished (and optionally stale) worker files from the shared context
+    Prune(WorkerPruneArgs),
+}
+
+#[derive(Args)]
+pub struct WorkerPruneArgs {
+    /// Also remove active workers not updated for this long
+    #[arg(long, value_parser = parse_stale_after)]
+    pub stale_after: Option<TimeDelta>,
+    #[arg(long)]
+    pub dry_run: bool,
+    #[arg(long)]
+    pub sync: bool,
 }
 
 #[derive(Args, Clone, Default)]
