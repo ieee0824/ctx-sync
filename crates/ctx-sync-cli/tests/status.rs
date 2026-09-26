@@ -73,7 +73,7 @@ fn shows_a_conflict_after_a_failed_sync() {
         .success()
         .stdout(contains("CONFLICT (detected at "))
         .stdout(contains("  20-architecture.md"))
-        .stdout(contains("git rebase origin/main"));
+        .stdout(contains("ctx-sync conflict resolve --keep-local"));
 }
 
 #[test]

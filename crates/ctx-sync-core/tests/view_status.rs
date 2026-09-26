@@ -97,10 +97,9 @@ fn shows_a_recorded_conflict_with_resolution_steps() {
 CONFLICT (detected at 2026-09-23T18:30:00+09:00):
   20-architecture.md
 
-  Resolve manually in the context repo:
-    cd {REPO}
-    git rebase origin/main   # fix the conflicts, then `git rebase --continue`
-    ctx-sync sync
+  Resolve it with one of:
+    ctx-sync conflict show
+    ctx-sync conflict resolve --keep-local | --keep-remote | --merged <FILE>=<PATH>
 
 You: parser (11111111)"
     );

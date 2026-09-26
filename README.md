@@ -129,7 +129,7 @@ A secret Gist is readable by anyone with its URL. Do not treat it as a secret st
 - Values that start with `-` must be passed as `--option=value`, for example `ctx-sync handoff --summary="-x flag removed"`. Otherwise the value is read as another option.
 - **HTTPS authentication:** Run `gh auth setup-git` before pushing over HTTPS, or use `--ssh` when creating or attaching the project to use `git@gist.github.com`. Git credentials or SSH access must already be configured.
 - **Git hooks:** ctx-sync does not skip hooks when committing or pushing the context repo. If a global hook (for example, a pre-push hook that blocks pushes to `main`) rejects a push to `gist.github.com`, update the hook to exclude the Gist remote.
-- **Context conflict:** Run `ctx-sync status` and follow its displayed steps. Open the listed context repo, rebase onto its remote branch, resolve the listed files, continue the rebase, then run `ctx-sync sync`.
+- **Context conflict:** Run `ctx-sync conflict show` to inspect both sides, or `ctx-sync conflict show --json` for structured output. Run `ctx-sync conflict resolve --keep-local`, `--keep-remote`, or `--merged <FILE>=<PATH>` to resolve and sync. `ctx-sync status` lists the affected files.
 
 ## License
 
