@@ -30,7 +30,7 @@ pub enum Command {
     /// Print the full shared context
     Context(ContextArgs),
     /// Print onboarding context for a newly joining agent
-    Onboard,
+    Onboard(OnboardArgs),
     /// Show project, sync and worker status
     Status,
     /// Update this worker's shared state
@@ -90,6 +90,12 @@ pub struct RegisterArgs {
 
 #[derive(Args)]
 pub struct ContextArgs {
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args)]
+pub struct OnboardArgs {
     #[arg(long)]
     pub json: bool,
 }
@@ -188,6 +194,8 @@ pub struct AgentStartArgs {
     /// Set status back to working if it is done/abandoned
     #[arg(long)]
     pub resume: bool,
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args)]
