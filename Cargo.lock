@@ -256,6 +256,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctx-sync-mcp"
+version = "0.1.0"
+dependencies = [
+ "ctx-sync-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ctx-sync-testutil"
 version = "0.1.0"
 dependencies = [
