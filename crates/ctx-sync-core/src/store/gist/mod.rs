@@ -194,6 +194,15 @@ impl ContextStore for GistStore {
         Ok(())
     }
 
+    fn remove_file(&self, name: &str) -> Result<bool> {
+        Self::check_name(name)?;
+        match std::fs::remove_file(self.repo_dir.join(name)) {
+            Ok(()) => Ok(true),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     fn commit(&self, message: &str) -> Result<Option<String>> {
         let _lock = self.lock()?;
         self.commit_unlocked(message)

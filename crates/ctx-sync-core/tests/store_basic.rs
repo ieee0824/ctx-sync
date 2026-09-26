@@ -50,6 +50,21 @@ fn commit_returns_none_without_changes() {
 }
 
 #[test]
+fn removes_a_committed_file_and_records_the_deletion() {
+    let remote = TestRemote::new();
+    let home = tempfile::tempdir().unwrap();
+    let store = store(&remote, home.path());
+    store.ensure().unwrap();
+    store.write_file("obsolete.md", "old").unwrap();
+    store.commit("add obsolete file").unwrap();
+
+    assert!(store.remove_file("obsolete.md").unwrap());
+    assert!(store.commit("remove obsolete file").unwrap().is_some());
+    assert!(store.read_file("obsolete.md").unwrap().is_none());
+    assert!(!store.remove_file("obsolete.md").unwrap());
+}
+
+#[test]
 fn rejects_non_flat_file_names() {
     let remote = TestRemote::new();
     let home = tempfile::tempdir().unwrap();
@@ -58,6 +73,7 @@ fn rejects_non_flat_file_names() {
     for name in ["../a.md", "dir/a.md", "dir\\a.md", ".hidden", ""] {
         assert!(store.write_file(name, "x").is_err(), "{name}");
         assert!(store.read_file(name).is_err(), "{name}");
+        assert!(store.remove_file(name).is_err(), "{name}");
     }
 }
 

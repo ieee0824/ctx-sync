@@ -27,6 +27,8 @@ pub trait ContextStore {
     fn snapshot(&self) -> Result<ContextSnapshot>;
     fn read_file(&self, name: &str) -> Result<Option<String>>;
     fn write_file(&self, name: &str, content: &str) -> Result<()>;
+    /// Remove a flat context file. Returns false when it did not exist.
+    fn remove_file(&self, name: &str) -> Result<bool>;
     /// Commits every change and returns the short hash, or `None` when there
     /// was nothing to commit.
     fn commit(&self, message: &str) -> Result<Option<String>>;
