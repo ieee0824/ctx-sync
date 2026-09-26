@@ -5,10 +5,9 @@ use std::path::PathBuf;
 use serde_json::{Value, json};
 
 use crate::protocol;
+use crate::tools;
 
 pub struct Server {
-    /// Tool handlers use this starting in #159.
-    #[allow(dead_code)]
     pub project_dir: PathBuf,
 }
 
@@ -45,14 +44,22 @@ impl Server {
                 }),
             ),
             "ping" => protocol::success(id, json!({})),
-            "tools/list" => protocol::success(id, json!({"tools": []})),
+            "tools/list" => protocol::success(id, json!({"tools": tools::tool_definitions()})),
             "tools/call" => {
                 let name = object
                     .get("params")
                     .and_then(|params| params.get("name"))
                     .and_then(Value::as_str)
                     .unwrap_or_default();
-                protocol::error(id, -32602, &format!("Unknown tool: {name}"))
+                let arguments = object
+                    .get("params")
+                    .and_then(|params| params.get("arguments"))
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
+                match tools::call_tool(&self.project_dir, name, arguments) {
+                    Some(result) => protocol::success(id, result),
+                    None => protocol::error(id, -32602, &format!("Unknown tool: {name}")),
+                }
             }
             _ => protocol::error(id, -32601, "Method not found"),
         };
@@ -118,5 +125,54 @@ mod tests {
             )["error"]["message"],
             "Unknown tool: missing"
         );
+    }
+
+    #[test]
+    fn lists_six_tools_and_validates_calls() {
+        let mut server = Server::new(PathBuf::from("."));
+        let list = response(
+            &mut server,
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
+        );
+        let tools = list["result"]["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 6);
+        let names: Vec<_> = tools
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "get_context",
+                "get_onboarding_context",
+                "list_workers",
+                "update_worker",
+                "add_decision",
+                "finish_worker"
+            ]
+        );
+        let decision = tools
+            .iter()
+            .find(|tool| tool["name"] == "add_decision")
+            .unwrap();
+        assert_eq!(decision["inputSchema"]["required"], json!(["title"]));
+        assert_eq!(decision["inputSchema"]["type"], "object");
+        let invalid = response(
+            &mut server,
+            r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"update_worker","arguments":{"append":"yes"}}}"#,
+        );
+        assert_eq!(invalid["result"]["isError"], true);
+        assert_eq!(invalid["result"]["structuredContent"]["exit_code"], 4);
+        let missing_title = response(
+            &mut server,
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"add_decision","arguments":{}}}"#,
+        );
+        assert_eq!(missing_title["result"]["structuredContent"]["exit_code"], 4);
+        let placeholder = response(
+            &mut server,
+            r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"get_context","arguments":{"unknown":1}}}"#,
+        );
+        assert_eq!(placeholder["result"]["isError"], true);
+        assert_eq!(placeholder["result"]["structuredContent"]["exit_code"], 1);
     }
 }
