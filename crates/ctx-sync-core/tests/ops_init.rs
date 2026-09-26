@@ -42,6 +42,7 @@ fn options(project: &Path, name: &str, force: bool) -> InitOptions {
         },
         protocol: Protocol::Https,
         force,
+        context_files: ctx_sync_core::config::ContextFiles::default(),
         now: parse_now(Some(FIXED_NOW)).unwrap(),
     }
 }

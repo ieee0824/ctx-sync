@@ -9,7 +9,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use super::Runtime;
-use crate::config::{CONFIG_FILE, ProjectConfig};
+use crate::config::{CONFIG_FILE, ContextFiles, ProjectConfig};
 use crate::fs_util::TempDirGuard;
 use crate::gist_id::parse_gist_id;
 use crate::model::{META_FILE, Meta};
@@ -33,6 +33,7 @@ pub struct AttachOutcome {
     /// Whether `.ctx-sync.toml` was newly written.
     pub config_written: bool,
     pub revision: String,
+    pub warnings: Vec<String>,
 }
 
 pub fn attach(rt: &Runtime, opts: AttachOptions) -> Result<AttachOutcome> {
@@ -66,12 +67,29 @@ pub fn attach(rt: &Runtime, opts: AttachOptions) -> Result<AttachOutcome> {
             )));
         }
     };
+    let defaults = ContextFiles::default();
+    let meta_context = ContextFiles {
+        project: meta.project_file.clone().unwrap_or(defaults.project),
+        architecture: meta
+            .architecture_file
+            .clone()
+            .unwrap_or(defaults.architecture),
+    };
+    meta_context.validate()?;
+    let mut warnings = Vec::new();
+    if let Some(config_context) = &existing_context
+        && config_context != &meta_context
+    {
+        warnings.push(format!(
+            "{CONFIG_FILE} context file names differ from {META_FILE}; using {CONFIG_FILE}"
+        ));
+    }
+    let context_files = existing_context.unwrap_or(meta_context);
 
     let state = rt.state_root.project(&meta.project_id);
-    let mut store = rt.gist_store(&state, &gist_id, opts.protocol);
-    if let Some(files) = existing_context {
-        store = store.with_context_files(files);
-    }
+    let store = rt
+        .gist_store(&state, &gist_id, opts.protocol)
+        .with_context_files(context_files.clone());
     if state.context_repo().join(".git").exists() {
         // Already cloned on this machine (e.g. another worktree): reuse it,
         // pointing it at the requested URL.
@@ -86,7 +104,9 @@ pub fn attach(rt: &Runtime, opts: AttachOptions) -> Result<AttachOutcome> {
     drop(tmp);
 
     if !has_config {
-        ProjectConfig::new_gist(&gist_id).save(&config_path)?;
+        let mut config = ProjectConfig::new_gist(&gist_id);
+        config.context = context_files;
+        config.save(&config_path)?;
     }
     let mut index = Index::load(&rt.state_root)?;
     index.insert(&gist_id, meta.project_id);
@@ -104,6 +124,7 @@ pub fn attach(rt: &Runtime, opts: AttachOptions) -> Result<AttachOutcome> {
         gist_id,
         config_written: !has_config,
         revision: store.revision()?.unwrap_or_default(),
+        warnings,
     })
 }
 

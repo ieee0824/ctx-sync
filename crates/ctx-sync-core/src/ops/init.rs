@@ -9,12 +9,12 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use super::Runtime;
-use crate::config::{CONFIG_FILE, ProjectConfig};
+use crate::config::{CONFIG_FILE, ContextFiles, ProjectConfig};
 use crate::fs_util::TempDirGuard;
 use crate::gh;
 use crate::gist_id::parse_gist_id;
 use crate::model::docs::{initial_architecture_md, initial_project_md};
-use crate::model::{ARCHITECTURE_FILE, META_FILE, Meta, PROJECT_FILE};
+use crate::model::{META_FILE, Meta};
 use crate::state::{Index, LocalProject, Protocol};
 use crate::store::ContextStore;
 use crate::{Error, Result};
@@ -26,6 +26,7 @@ pub struct InitOptions {
     pub protocol: Protocol,
     /// Overwrite an existing `.ctx-sync.toml`.
     pub force: bool,
+    pub context_files: ContextFiles,
     pub now: DateTime<FixedOffset>,
 }
 
@@ -48,6 +49,7 @@ pub struct InitOutcome {
 }
 
 pub fn init(rt: &Runtime, opts: InitOptions) -> Result<InitOutcome> {
+    opts.context_files.validate()?;
     let name = opts.project_name.trim().to_string();
     if name.is_empty() {
         return Err(Error::InvalidConfig("project name is empty".into()));
@@ -72,7 +74,7 @@ fn init_existing_gist(
     name: &str,
     gist_id: &str,
 ) -> Result<InitOutcome> {
-    let meta = Meta::new(name, opts.now);
+    let meta = initial_meta(name, opts);
     let state = rt.state_root.project(&meta.project_id);
     let store = rt.gist_store(&state, gist_id, opts.protocol);
     store.ensure()?;
@@ -84,8 +86,8 @@ fn init_existing_gist(
         )));
     }
     store.write_file(META_FILE, &meta.to_json())?;
-    store.write_file(PROJECT_FILE, &initial_project_md(name))?;
-    store.write_file(ARCHITECTURE_FILE, &initial_architecture_md())?;
+    store.write_file(&opts.context_files.project, &initial_project_md(name))?;
+    store.write_file(&opts.context_files.architecture, &initial_architecture_md())?;
     store.commit(&format!("ctx-sync: init {name}"))?;
     let revision = store.sync(opts.now)?.revision;
     finish(rt, opts, &meta, gist_id, revision, Vec::new())
@@ -109,9 +111,9 @@ fn init_new_gist(
             "gh is not authenticated; run `gh auth login`".into(),
         ));
     }
-    let meta = Meta::new(name, opts.now);
+    let meta = initial_meta(name, opts);
     let tmp = TempDirGuard::new(rt.state_root.tmp_dir().join(Uuid::new_v4().to_string()));
-    let files = write_initial_files(tmp.path(), &meta)?;
+    let files = write_initial_files(tmp.path(), &meta, &opts.context_files)?;
     let gist_id = gh::gist_create(&files, public, &format!("ctx-sync: {name}"))?;
     drop(tmp);
 
@@ -126,14 +128,29 @@ fn init_new_gist(
     finish(rt, opts, &meta, &gist_id, revision, hints)
 }
 
-/// Writes `00-meta.json`, `10-project.md` and `20-architecture.md` into
-/// `dir` and returns their paths.
-fn write_initial_files(dir: &Path, meta: &Meta) -> Result<Vec<PathBuf>> {
+fn initial_meta(name: &str, opts: &InitOptions) -> Meta {
+    let mut meta = Meta::new(name, opts.now);
+    if opts.context_files != ContextFiles::default() {
+        meta.project_file = Some(opts.context_files.project.clone());
+        meta.architecture_file = Some(opts.context_files.architecture.clone());
+    }
+    meta
+}
+
+/// Writes the initial context files into `dir` and returns their paths.
+fn write_initial_files(
+    dir: &Path,
+    meta: &Meta,
+    context_files: &ContextFiles,
+) -> Result<Vec<PathBuf>> {
     std::fs::create_dir_all(dir)?;
     let files = [
         (META_FILE, meta.to_json()),
-        (PROJECT_FILE, initial_project_md(&meta.project_name)),
-        (ARCHITECTURE_FILE, initial_architecture_md()),
+        (
+            &*context_files.project,
+            initial_project_md(&meta.project_name),
+        ),
+        (&*context_files.architecture, initial_architecture_md()),
     ];
     let mut paths = Vec::new();
     for (name, content) in files {
@@ -154,7 +171,9 @@ fn finish(
     hints: Vec<String>,
 ) -> Result<InitOutcome> {
     let config_path = opts.project_root.join(CONFIG_FILE);
-    ProjectConfig::new_gist(gist_id).save(&config_path)?;
+    let mut config = ProjectConfig::new_gist(gist_id);
+    config.context = opts.context_files.clone();
+    config.save(&config_path)?;
     let mut index = Index::load(&rt.state_root)?;
     index.insert(gist_id, meta.project_id);
     index.save(&rt.state_root)?;
@@ -187,12 +206,13 @@ mod tests {
             "demo",
             parse_now(Some("2026-09-23T18:00:00+09:00")).unwrap(),
         );
-        let paths = write_initial_files(&dir.path().join("tmp"), &meta).unwrap();
+        let paths =
+            write_initial_files(&dir.path().join("tmp"), &meta, &ContextFiles::default()).unwrap();
         let names: Vec<_> = paths
             .iter()
             .map(|p| p.file_name().unwrap().to_str().unwrap())
             .collect();
-        assert_eq!(names, [META_FILE, PROJECT_FILE, ARCHITECTURE_FILE]);
+        assert_eq!(names, [META_FILE, "10-project.md", "20-architecture.md"]);
         let parsed = Meta::parse(&std::fs::read_to_string(&paths[0]).unwrap()).unwrap();
         assert_eq!(parsed, meta);
         let project = MdDoc::parse(&std::fs::read_to_string(&paths[1]).unwrap()).unwrap();
@@ -225,6 +245,7 @@ mod tests {
                 remote: InitRemote::CreateGist { public: false },
                 protocol: Protocol::Https,
                 force: false,
+                context_files: ContextFiles::default(),
                 now: parse_now(None).unwrap(),
             },
         )

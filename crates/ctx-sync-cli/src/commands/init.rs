@@ -1,3 +1,4 @@
+use ctx_sync_core::config::ContextFiles;
 use ctx_sync_core::ops::{self, InitOptions, InitRemote, Runtime};
 use ctx_sync_core::state::Protocol;
 use ctx_sync_core::{Error, Result, clock};
@@ -58,6 +59,16 @@ pub fn run(args: &InitArgs) -> Result<()> {
                 Protocol::Https
             },
             force: args.force,
+            context_files: ContextFiles {
+                project: args
+                    .project_file
+                    .clone()
+                    .unwrap_or_else(|| ContextFiles::default().project),
+                architecture: args
+                    .architecture_file
+                    .clone()
+                    .unwrap_or_else(|| ContextFiles::default().architecture),
+            },
             now: clock::now()?,
         },
     )?;

@@ -60,6 +60,10 @@ pub enum Command {
 pub struct InitArgs {
     #[arg(long)]
     pub project: Option<String>,
+    #[arg(long)]
+    pub project_file: Option<String>,
+    #[arg(long)]
+    pub architecture_file: Option<String>,
     #[arg(long, conflicts_with = "gist_id")]
     pub create_gist: bool,
     #[arg(long)]

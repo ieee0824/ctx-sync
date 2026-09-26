@@ -92,6 +92,8 @@ pub fn snapshot() -> ContextSnapshot {
             project_name: "demo".into(),
             created_at: time("2026-09-23T18:00:00+09:00"),
             ctx_sync_version: Some("0.1.0".into()),
+            project_file: None,
+            architecture_file: None,
         },
         project: MdDoc::parse(
             "# Project\n\n## Goal\n\nShare the development context.\n\n## Non Goals\n\n- AI chat\n",
